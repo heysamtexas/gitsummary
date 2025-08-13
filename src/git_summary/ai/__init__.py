@@ -2,10 +2,19 @@
 
 This module provides AI-powered analysis and summarization capabilities
 using LiteLLM for multi-provider support, with different personas for
-varied analysis perspectives.
+varied analysis perspectives and rich context gathering for detailed analysis.
 """
 
 from .client import LLMClient
+from .context import ContextGatheringEngine, RichContext, TokenBudget
 from .personas import BasePersona, PersonaManager, TechnicalAnalystPersona
 
-__all__ = ["LLMClient", "BasePersona", "TechnicalAnalystPersona", "PersonaManager"]
+__all__ = [
+    "LLMClient",
+    "BasePersona",
+    "TechnicalAnalystPersona",
+    "PersonaManager",
+    "ContextGatheringEngine",
+    "RichContext",
+    "TokenBudget",
+]
