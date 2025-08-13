@@ -1,17 +1,31 @@
 """Command-line interface for git-summary."""
 
+import asyncio
+import json
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+
 import typer
 from rich import print
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from git_summary.config import Config
+from git_summary.fetchers import EventCoordinator
+from git_summary.github_client import GitHubClient
+from git_summary.processors import EventProcessor
 
 app = typer.Typer(
     name="git-summary",
     help="A comprehensive tool for querying the GitHub API to extract, analyze, and summarize user activity",
     no_args_is_help=True,
 )
+
+console = Console()
 
 
 @app.command()
@@ -99,8 +113,202 @@ def summary(
     if output:
         print(f"[cyan]Output will be saved to: {output}[/cyan]")
 
-    # TODO: Implement actual GitHub API integration
-    print("[yellow]Note: Implementation coming soon![/yellow]")
+    # Run the async analysis
+    try:
+        asyncio.run(_analyze_user_activity(user, token, days, output))
+    except KeyboardInterrupt:
+        print("\n[red]Operation cancelled by user[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+async def _analyze_user_activity(
+    user: str, token: str, days: int, output: str | None
+) -> None:
+    """Perform the actual GitHub activity analysis."""
+    # Calculate date range
+    end_date = datetime.now(UTC)
+    start_date = end_date - timedelta(days=days)
+
+    console.print(
+        Panel.fit(
+            f"[bold cyan]Analyzing GitHub Activity[/bold cyan]\\n\\n"
+            f"[white]User:[/white] [green]{user}[/green]\\n"
+            f"[white]Period:[/white] [blue]{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}[/blue]\\n"
+            f"[white]Duration:[/white] [yellow]{days} days[/yellow]",
+            title="📊 GitHub Activity Analysis",
+        )
+    )
+
+    # Initialize GitHub client and coordinator
+    client = GitHubClient(token=token)
+    coordinator = EventCoordinator(client)
+    processor = EventProcessor()
+
+    try:
+        # Fetch events with progress indication
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TextColumn("•"),
+            TextColumn("[cyan]{task.fields[events]}[/cyan] events"),
+            TimeElapsedColumn(),
+            console=console,
+            transient=False,
+        ) as progress:
+            # Create a task for fetching
+            fetch_task = progress.add_task(
+                f"Fetching events for [green]{user}[/green]...", events=0
+            )
+
+            def update_progress(current: int, _total: int | None) -> None:
+                progress.update(fetch_task, events=current)
+
+            # Fetch events by date range
+            events = await coordinator.fetch_events_by_date_range(
+                username=user,
+                start_date=start_date,
+                end_date=end_date,
+                max_pages=None,  # Fetch all available events
+                max_events=None,
+                progress_callback=update_progress,
+            )
+
+            progress.update(
+                fetch_task, description=f"✓ Fetched events for [green]{user}[/green]"
+            )
+
+        console.print(
+            f"\\n[green]✓[/green] Successfully fetched [cyan]{len(events)}[/cyan] events"
+        )
+
+        # Process events with progress indication
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=False,
+        ) as progress:
+            process_task = progress.add_task(
+                "Processing events and generating analysis..."
+            )
+
+            # Process the events
+            report = processor.process(events, user, start_date, end_date)
+
+            progress.update(
+                process_task, description="✓ Completed event processing and analysis"
+            )
+
+        console.print("[green]✓[/green] Analysis complete!\\n")
+
+        # Display results
+        _display_activity_report(report)
+
+        # Save to file if requested
+        if output:
+            _save_report_to_file(report, output)
+            console.print(f"\\n[green]✓[/green] Results saved to [cyan]{output}[/cyan]")
+
+    except Exception as e:
+        console.print(f"\\n[red]✗[/red] Analysis failed: {e}")
+        raise
+    finally:
+        # Clean up client connection
+        await client.close()
+
+
+def _display_activity_report(report: Any) -> None:
+    """Display the activity report in a rich console format."""
+    # Summary Panel
+    summary_content = (
+        f"[white]Total Events:[/white] [cyan]{report.summary.total_events}[/cyan]\\n"
+        f"[white]Active Repositories:[/white] [green]{report.summary.repositories_active}[/green]\\n"
+        f"[white]Most Active Repository:[/white] [yellow]{report.summary.most_active_repository or 'N/A'}[/yellow]\\n"
+        f"[white]Most Common Event:[/white] [blue]{report.summary.most_common_event_type or 'N/A'}[/blue]"
+    )
+
+    console.print(
+        Panel(summary_content, title="📈 Activity Summary", border_style="green")
+    )
+
+    # Event Types Breakdown
+    if report.summary.event_breakdown:
+        event_table = Table(
+            title="📊 Event Types Breakdown", show_header=True, header_style="bold blue"
+        )
+        event_table.add_column("Event Type", style="cyan")
+        event_table.add_column("Count", justify="right", style="green")
+
+        # Sort by count descending
+        for event_type, count in sorted(
+            report.summary.event_breakdown.items(), key=lambda x: x[1], reverse=True
+        ):
+            event_table.add_row(event_type, str(count))
+
+        console.print(event_table)
+
+    # Daily Activity (if multiple days)
+    if len(report.daily_rollups) > 1:
+        daily_table = Table(
+            title="📅 Daily Activity", show_header=True, header_style="bold blue"
+        )
+        daily_table.add_column("Date", style="cyan")
+        daily_table.add_column("Events", justify="right", style="green")
+        daily_table.add_column("Repositories", justify="right", style="yellow")
+
+        for rollup in report.daily_rollups:
+            daily_table.add_row(
+                rollup.date, str(rollup.events), str(len(rollup.repositories))
+            )
+
+        console.print(daily_table)
+
+    # Top Repositories
+    if report.repository_breakdown:
+        repo_table = Table(
+            title="🏆 Repository Activity", show_header=True, header_style="bold blue"
+        )
+        repo_table.add_column("Repository", style="cyan")
+        repo_table.add_column("Events", justify="right", style="green")
+        repo_table.add_column("First Activity", style="dim")
+
+        # Show top 10 repositories by activity
+        sorted_repos = sorted(
+            report.repository_breakdown.items(), key=lambda x: x[1].events, reverse=True
+        )[:10]
+
+        for repo_name, breakdown in sorted_repos:
+            first_activity = breakdown.first_activity or "N/A"
+            if first_activity and first_activity != "N/A":
+                # Format the timestamp nicely
+                try:
+                    dt = datetime.fromisoformat(first_activity.replace("Z", "+00:00"))
+                    first_activity = dt.strftime("%Y-%m-%d %H:%M")
+                except ValueError:
+                    pass  # Keep original if parsing fails
+
+            repo_table.add_row(repo_name, str(breakdown.events), first_activity)
+
+        console.print(repo_table)
+
+
+def _save_report_to_file(report: Any, output_path: str) -> None:
+    """Save the activity report to a JSON file."""
+    output_file = Path(output_path)
+
+    # Ensure output directory exists
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Convert to dict for JSON serialization
+    report_dict = (
+        report.model_dump() if hasattr(report, "model_dump") else report.__dict__
+    )
+
+    with output_file.open("w", encoding="utf-8") as f:
+        json.dump(report_dict, f, indent=2, ensure_ascii=False)
 
 
 @app.command()
