@@ -53,11 +53,16 @@ def summary(
         "-o",
         help="Output file (JSON format). If not specified, prints to stdout",
     ),
+    max_events: int | None = typer.Option(
+        None,
+        "--max-events",
+        help="Maximum number of events to process (useful for high-activity users)",
+    ),
     # Placeholder filtering options (MVP - not implemented yet)
     include_events: str | None = typer.Option(
         None,
         "--include-events",
-        help="[MVP: Not implemented] Comma-separated list of event types to include",
+        help="Comma-separated list of event types to include (e.g., 'PushEvent,ReleaseEvent')",
     ),
     exclude_repos: str | None = typer.Option(
         None,
@@ -99,10 +104,6 @@ def summary(
             raise typer.Exit(1)
 
     # Show MVP warnings for unimplemented features
-    if include_events:
-        print(
-            "[yellow]⚠️  --include-events is not implemented in this MVP version[/yellow]"
-        )
     if exclude_repos:
         print(
             "[yellow]⚠️  --exclude-repos is not implemented in this MVP version[/yellow]"
@@ -110,12 +111,21 @@ def summary(
 
     print(f"[green]Analyzing GitHub activity for user: {user}[/green]")
     print(f"[blue]Time range: Last {days} days[/blue]")
+    if max_events:
+        print(f"[yellow]Event limit: {max_events} events maximum[/yellow]")
+    if include_events:
+        event_list = include_events.split(",")
+        print(f"[magenta]Event filter: {', '.join(event_list)}[/magenta]")
     if output:
         print(f"[cyan]Output will be saved to: {output}[/cyan]")
 
     # Run the async analysis
     try:
-        asyncio.run(_analyze_user_activity(user, token, days, output))
+        asyncio.run(
+            _analyze_user_activity(
+                user, token, days, output, max_events, include_events
+            )
+        )
     except KeyboardInterrupt:
         print("\n[red]Operation cancelled by user[/red]")
         raise typer.Exit(1)
@@ -125,7 +135,12 @@ def summary(
 
 
 async def _analyze_user_activity(
-    user: str, token: str, days: int, output: str | None
+    user: str,
+    token: str,
+    days: int,
+    output: str | None,
+    max_events: int | None,
+    include_events: str | None,
 ) -> None:
     """Perform the actual GitHub activity analysis."""
     # Calculate date range
@@ -172,7 +187,7 @@ async def _analyze_user_activity(
                 start_date=start_date,
                 end_date=end_date,
                 max_pages=None,  # Fetch all available events
-                max_events=None,
+                max_events=max_events,
                 progress_callback=update_progress,
             )
 
@@ -183,6 +198,18 @@ async def _analyze_user_activity(
         console.print(
             f"\\n[green]✓[/green] Successfully fetched [cyan]{len(events)}[/cyan] events"
         )
+
+        # Filter events by type if specified
+        if include_events:
+            original_count = len(events)
+            event_types = [
+                event_type.strip() for event_type in include_events.split(",")
+            ]
+            events = [event for event in events if event.type in event_types]
+            console.print(
+                f"[magenta]✓[/magenta] Filtered to [cyan]{len(events)}[/cyan] events "
+                f"({original_count - len(events)} excluded)"
+            )
 
         # Process events with progress indication
         with Progress(
@@ -293,6 +320,124 @@ def _display_activity_report(report: Any) -> None:
             repo_table.add_row(repo_name, str(breakdown.events), first_activity)
 
         console.print(repo_table)
+
+    # Detailed Repository Activity
+    _display_detailed_repository_activity(report)
+
+
+def _display_detailed_repository_activity(report: Any) -> None:
+    """Display detailed activity breakdown by repository with commit messages and release details."""
+    if not report.detailed_events:
+        return
+
+    # Group events by repository
+    repo_events: dict[str, dict[str, list[Any]]] = {}
+    for event in report.detailed_events:
+        repo_name = event.repository
+        if repo_name not in repo_events:
+            repo_events[repo_name] = {"PushEvent": [], "ReleaseEvent": [], "other": []}
+
+        if event.type == "PushEvent":
+            repo_events[repo_name]["PushEvent"].append(event)
+        elif event.type == "ReleaseEvent":
+            repo_events[repo_name]["ReleaseEvent"].append(event)
+        else:
+            repo_events[repo_name]["other"].append(event)
+
+    # Display top 5 most active repositories with details
+    sorted_repos = sorted(
+        repo_events.items(),
+        key=lambda x: len(x[1]["PushEvent"])
+        + len(x[1]["ReleaseEvent"])
+        + len(x[1]["other"]),
+        reverse=True,
+    )[:5]
+
+    for repo_name, events in sorted_repos:
+        push_events = events["PushEvent"]
+        release_events = events["ReleaseEvent"]
+        total_events = len(push_events) + len(release_events) + len(events["other"])
+
+        if total_events == 0:
+            continue
+
+        console.print(
+            f"\n[bold cyan]📁 {repo_name}[/bold cyan] ([green]{total_events}[/green] events)"
+        )
+
+        # Show commits
+        if push_events:
+            console.print(f"  [yellow]💻 {len(push_events)} commits:[/yellow]")
+            for event in push_events[:5]:  # Show first 5 commits
+                details = event.details
+                commit_count = details.get("commits_count", 1)
+                branch = details.get("ref", "unknown").replace("refs/heads/", "")
+
+                # Format timestamp
+                try:
+                    dt = datetime.fromisoformat(event.created_at.replace("Z", "+00:00"))
+                    time_str = dt.strftime("%m/%d %H:%M")
+                except ValueError:
+                    time_str = event.created_at[:10]
+
+                console.print(
+                    f"    [dim]{time_str}[/dim] [{commit_count} commit{'s' if commit_count > 1 else ''}] [blue]→ {branch}[/blue]"
+                )
+
+                # Show commit messages
+                if "commit_messages" in details:
+                    for msg in details["commit_messages"][
+                        :2
+                    ]:  # Show first 2 commit messages
+                        # Truncate long commit messages
+                        if len(msg) > 80:
+                            msg = msg[:77] + "..."
+                        console.print(f"      [green]•[/green] {msg}")
+
+                    if details.get("more_commits", 0) > 0:
+                        console.print(
+                            f"      [dim]... and {details['more_commits']} more commits[/dim]"
+                        )
+
+            if len(push_events) > 5:
+                console.print(
+                    f"    [dim]... and {len(push_events) - 5} more commits[/dim]"
+                )
+
+        # Show releases
+        if release_events:
+            console.print(f"  [yellow]🚀 {len(release_events)} releases:[/yellow]")
+            for event in release_events[:3]:  # Show first 3 releases
+                details = event.details
+                version = details.get("version", "unknown")
+                release_name = details.get("release_name", "")
+
+                # Format timestamp
+                try:
+                    dt = datetime.fromisoformat(event.created_at.replace("Z", "+00:00"))
+                    time_str = dt.strftime("%m/%d %H:%M")
+                except ValueError:
+                    time_str = event.created_at[:10]
+
+                console.print(
+                    f"    [dim]{time_str}[/dim] [magenta]{version}[/magenta]", end=""
+                )
+                if release_name and release_name != version:
+                    console.print(f" - {release_name}")
+                else:
+                    console.print()
+
+                # Show release notes (first line only)
+                if "release_notes" in details:
+                    notes = details["release_notes"].split("\n")[0]
+                    if len(notes) > 100:
+                        notes = notes[:97] + "..."
+                    console.print(f"      [dim]{notes}[/dim]")
+
+            if len(release_events) > 3:
+                console.print(
+                    f"    [dim]... and {len(release_events) - 3} more releases[/dim]"
+                )
 
 
 def _save_report_to_file(report: Any, output_path: str) -> None:

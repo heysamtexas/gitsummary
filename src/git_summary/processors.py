@@ -230,8 +230,17 @@ class EventProcessor:
         if event.type == "PushEvent":
             payload = event.payload
             if hasattr(payload, "commits") and payload.commits:
-                details["commits"] = len(payload.commits)
+                details["commits_count"] = len(payload.commits)
                 details["ref"] = getattr(payload, "ref", "unknown")
+                # Extract commit messages (first 3 commits for brevity)
+                commit_messages = []
+                for commit in payload.commits[:3]:
+                    if hasattr(commit, "message"):
+                        commit_messages.append(commit.message.strip())
+                if commit_messages:
+                    details["commit_messages"] = commit_messages
+                if len(payload.commits) > 3:
+                    details["more_commits"] = len(payload.commits) - 3
         elif event.type == "IssuesEvent":
             payload = event.payload
             if hasattr(payload, "action"):
@@ -266,6 +275,23 @@ class EventProcessor:
             payload = event.payload
             if hasattr(payload, "action"):
                 details["action"] = payload.action
+        elif event.type == "ReleaseEvent":
+            payload = event.payload
+            if hasattr(payload, "action"):
+                details["action"] = payload.action
+            if hasattr(payload, "release"):
+                release = payload.release
+                if hasattr(release, "tag_name"):
+                    details["version"] = release.tag_name
+                if hasattr(release, "name"):
+                    details["release_name"] = release.name
+                if hasattr(release, "body") and release.body:
+                    # Truncate release notes to first 200 chars
+                    details["release_notes"] = release.body[:200].strip()
+                    if len(release.body) > 200:
+                        details["release_notes"] += "..."
+                if hasattr(release, "prerelease"):
+                    details["prerelease"] = release.prerelease
 
         return details
 

@@ -1,0 +1,826 @@
+{
+  "user": "heysamtexas",
+  "period": {
+    "start": "2025-08-12T15:42:56.844301+00:00",
+    "end": "2025-08-13T15:42:56.844301+00:00"
+  },
+  "summary": {
+    "total_events": 72,
+    "repositories_active": 9,
+    "event_breakdown": {
+      "PushEvent": 56,
+      "ReleaseEvent": 16
+    },
+    "most_active_repository": "heysamtexas/django-container-manager",
+    "most_common_event_type": "PushEvent"
+  },
+  "daily_rollups": [
+    {
+      "date": "2025-08-06",
+      "events": 24,
+      "repositories": [
+        "heysamtexas/django-container-manager"
+      ],
+      "event_types": {
+        "ReleaseEvent": 14,
+        "PushEvent": 10
+      }
+    },
+    {
+      "date": "2025-08-07",
+      "events": 12,
+      "repositories": [
+        "heysamtexas/django-container-manager"
+      ],
+      "event_types": {
+        "PushEvent": 10,
+        "ReleaseEvent": 2
+      }
+    },
+    {
+      "date": "2025-08-08",
+      "events": 6,
+      "repositories": [
+        "heysamtexas/agentsasylum",
+        "heysamtexas/django-container-manager",
+        "sitegoals/abi-microsite"
+      ],
+      "event_types": {
+        "PushEvent": 6
+      }
+    },
+    {
+      "date": "2025-08-09",
+      "events": 2,
+      "repositories": [
+        "heysamtexas/sams-chief-of-staff"
+      ],
+      "event_types": {
+        "PushEvent": 2
+      }
+    },
+    {
+      "date": "2025-08-11",
+      "events": 28,
+      "repositories": [
+        "heysamtexas/REST-headless-browser",
+        "heysamtexas/calendar-sync",
+        "heysamtexas/django-oauth2-capture",
+        "hm-collab-system/ibxadvisors",
+        "simplecto/django-reference-implementation"
+      ],
+      "event_types": {
+        "PushEvent": 28
+      }
+    }
+  ],
+  "repository_breakdown": {
+    "hm-collab-system/ibxadvisors": {
+      "events": 2,
+      "event_types": {
+        "PushEvent": 2
+      },
+      "last_activity": "2025-08-11T13:54:38Z",
+      "first_activity": "2025-08-11T13:54:38Z"
+    },
+    "heysamtexas/REST-headless-browser": {
+      "events": 14,
+      "event_types": {
+        "PushEvent": 14
+      },
+      "last_activity": "2025-08-11T13:43:58Z",
+      "first_activity": "2025-08-11T13:42:10Z"
+    },
+    "heysamtexas/django-oauth2-capture": {
+      "events": 8,
+      "event_types": {
+        "PushEvent": 8
+      },
+      "last_activity": "2025-08-11T13:18:36Z",
+      "first_activity": "2025-08-11T12:49:15Z"
+    },
+    "heysamtexas/calendar-sync": {
+      "events": 2,
+      "event_types": {
+        "PushEvent": 2
+      },
+      "last_activity": "2025-08-11T11:14:19Z",
+      "first_activity": "2025-08-11T11:14:19Z"
+    },
+    "simplecto/django-reference-implementation": {
+      "events": 2,
+      "event_types": {
+        "PushEvent": 2
+      },
+      "last_activity": "2025-08-11T09:29:23Z",
+      "first_activity": "2025-08-11T09:29:23Z"
+    },
+    "heysamtexas/sams-chief-of-staff": {
+      "events": 2,
+      "event_types": {
+        "PushEvent": 2
+      },
+      "last_activity": "2025-08-09T10:21:46Z",
+      "first_activity": "2025-08-09T10:21:46Z"
+    },
+    "heysamtexas/agentsasylum": {
+      "events": 2,
+      "event_types": {
+        "PushEvent": 2
+      },
+      "last_activity": "2025-08-08T23:36:27Z",
+      "first_activity": "2025-08-08T23:36:27Z"
+    },
+    "heysamtexas/django-container-manager": {
+      "events": 38,
+      "event_types": {
+        "PushEvent": 22,
+        "ReleaseEvent": 16
+      },
+      "last_activity": "2025-08-08T23:05:31Z",
+      "first_activity": "2025-08-06T21:59:59Z"
+    },
+    "sitegoals/abi-microsite": {
+      "events": 2,
+      "event_types": {
+        "PushEvent": 2
+      },
+      "last_activity": "2025-08-08T16:46:30Z",
+      "first_activity": "2025-08-08T16:46:30Z"
+    }
+  },
+  "detailed_events": [
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:54:38Z",
+      "repository": "hm-collab-system/ibxadvisors",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:43:58Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 3,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:43:49Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 11,
+        "ref": "refs/heads/dependabot/pip/pydantic-2.11.7"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:43:07Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 3,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:42:59Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 8,
+        "ref": "refs/heads/dependabot/pip/cachetools-6.1.0"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:42:34Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:42:22Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:42:10Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:18:36Z",
+      "repository": "heysamtexas/django-oauth2-capture",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:04:08Z",
+      "repository": "heysamtexas/django-oauth2-capture",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T12:56:44Z",
+      "repository": "heysamtexas/django-oauth2-capture",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T12:49:15Z",
+      "repository": "heysamtexas/django-oauth2-capture",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T11:14:19Z",
+      "repository": "heysamtexas/calendar-sync",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T09:29:23Z",
+      "repository": "simplecto/django-reference-implementation",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-09T10:21:46Z",
+      "repository": "heysamtexas/sams-chief-of-staff",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-08T23:36:27Z",
+      "repository": "heysamtexas/agentsasylum",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-08T23:05:31Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-08T16:46:30Z",
+      "repository": "sitegoals/abi-microsite",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/forensics-analysis"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-07T20:21:16Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-07T20:18:17Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-07T20:14:09Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-07T20:12:45Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-07T20:01:30Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-07T20:01:05Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 6,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T22:56:17Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-06T22:56:14Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T22:53:13Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-06T22:53:11Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T22:34:23Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-06T22:34:21Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 3,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T22:15:30Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T22:06:32Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-06T22:06:22Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T22:03:12Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-06T22:02:57Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T21:59:59Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:54:38Z",
+      "repository": "hm-collab-system/ibxadvisors",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:43:58Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 3,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:43:49Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 11,
+        "ref": "refs/heads/dependabot/pip/pydantic-2.11.7"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:43:07Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 3,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:42:59Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 8,
+        "ref": "refs/heads/dependabot/pip/cachetools-6.1.0"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:42:34Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:42:22Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:42:10Z",
+      "repository": "heysamtexas/REST-headless-browser",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:18:36Z",
+      "repository": "heysamtexas/django-oauth2-capture",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T13:04:08Z",
+      "repository": "heysamtexas/django-oauth2-capture",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T12:56:44Z",
+      "repository": "heysamtexas/django-oauth2-capture",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T12:49:15Z",
+      "repository": "heysamtexas/django-oauth2-capture",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T11:14:19Z",
+      "repository": "heysamtexas/calendar-sync",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-11T09:29:23Z",
+      "repository": "simplecto/django-reference-implementation",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-09T10:21:46Z",
+      "repository": "heysamtexas/sams-chief-of-staff",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-08T23:36:27Z",
+      "repository": "heysamtexas/agentsasylum",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/master"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-08T23:05:31Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-08T16:46:30Z",
+      "repository": "sitegoals/abi-microsite",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/forensics-analysis"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-07T20:21:16Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-07T20:18:17Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-07T20:14:09Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-07T20:12:45Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-07T20:01:30Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-07T20:01:05Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 6,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T22:56:17Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-06T22:56:14Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 2,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T22:53:13Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-06T22:53:11Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T22:34:23Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-06T22:34:21Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 3,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T22:15:30Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T22:06:32Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-06T22:06:22Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T22:03:12Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    },
+    {
+      "type": "PushEvent",
+      "created_at": "2025-08-06T22:02:57Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {
+        "commits": 1,
+        "ref": "refs/heads/main"
+      }
+    },
+    {
+      "type": "ReleaseEvent",
+      "created_at": "2025-08-06T21:59:59Z",
+      "repository": "heysamtexas/django-container-manager",
+      "actor": "heysamtexas",
+      "details": {}
+    }
+  ]
+}
