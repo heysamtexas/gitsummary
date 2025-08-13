@@ -7,6 +7,7 @@ varied analysis perspectives and rich context gathering for detailed analysis.
 
 from .client import LLMClient
 from .context import ContextGatheringEngine, RichContext, TokenBudget
+from .orchestrator import ActivitySummarizer
 from .personas import BasePersona, PersonaManager, TechnicalAnalystPersona
 
 __all__ = [
@@ -17,4 +18,5 @@ __all__ = [
     "ContextGatheringEngine",
     "RichContext",
     "TokenBudget",
+    "ActivitySummarizer",
 ]
