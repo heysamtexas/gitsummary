@@ -177,10 +177,13 @@ For parallel development on multiple GitHub issues, use git worktrees to work on
 
 ### Setup Worktrees
 ```bash
-# Create worktrees for parallel development
-git worktree add ../git-summary-public-fetcher -b feature/public-events-fetcher
-git worktree add ../git-summary-coordinator -b feature/smart-coordinator
-git worktree add ../git-summary-processing -b feature/event-processing
+# Create worktrees directory (if not exists)
+mkdir -p worktrees
+
+# Create worktrees for parallel development (in local worktrees/ folder)
+git worktree add worktrees/public-events-fetcher -b feature/public-events-fetcher
+git worktree add worktrees/smart-coordinator -b feature/smart-coordinator
+git worktree add worktrees/event-processing -b feature/event-processing
 
 # List all worktrees
 git worktree list
@@ -188,14 +191,15 @@ git worktree list
 
 ### Directory Structure
 ```
-git-summary/                    # Main worktree (master branch)
+git-summary/                              # Main worktree (master branch)
+├── worktrees/                            # Local worktrees folder (gitignored)
+│   ├── public-events-fetcher/            # Feature worktree
+│   │   ├── src/git_summary/
+│   │   └── ...
+│   ├── smart-coordinator/                # Feature worktree
+│   └── event-processing/                 # Feature worktree
 ├── src/git_summary/
 └── ...
-git-summary-public-fetcher/     # Feature worktree
-├── src/git_summary/
-└── ...
-git-summary-coordinator/        # Feature worktree
-git-summary-processing/         # Feature worktree
 ```
 
 ### Parallel Development Workflow
@@ -213,7 +217,7 @@ git-summary-processing/         # Feature worktree
 ### Dependency Management
 ```bash
 # Share commits between worktrees when needed
-cd ../git-summary-coordinator
+cd worktrees/smart-coordinator
 git cherry-pick feature/public-events-fetcher~1..feature/public-events-fetcher
 ```
 
@@ -234,9 +238,9 @@ git push origin feature/event-processing
 ### Cleanup When Done
 ```bash
 # Remove worktrees after feature completion
-git worktree remove ../git-summary-public-fetcher
-git worktree remove ../git-summary-coordinator
-git worktree remove ../git-summary-processing
+git worktree remove worktrees/public-events-fetcher
+git worktree remove worktrees/smart-coordinator
+git worktree remove worktrees/event-processing
 
 # Delete feature branches if no longer needed
 git branch -d feature/public-events-fetcher
