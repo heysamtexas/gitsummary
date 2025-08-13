@@ -12,7 +12,8 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import httpx
-from pydantic import BaseModel
+
+from git_summary.models import BaseGitHubEvent, EventFactory
 
 logger = logging.getLogger(__name__)
 
@@ -39,18 +40,6 @@ class CircuitBreakerError(Exception):
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
-
-
-class GitHubEvent(BaseModel):
-    """Model for a GitHub event."""
-
-    id: str
-    type: str
-    actor: dict[str, Any]
-    repo: dict[str, Any]
-    payload: dict[str, Any]
-    created_at: str
-    public: bool
 
 
 class GitHubClient:
@@ -402,7 +391,7 @@ class GitHubClient:
         username: str,
         per_page: int = 100,
         page: int = 1,
-    ) -> list[GitHubEvent]:
+    ) -> list[BaseGitHubEvent]:
         """Fetch events for a specific user.
 
         Args:
@@ -427,7 +416,7 @@ class GitHubClient:
         self._update_rate_limit_info(response)
         data = response.json()
 
-        return [GitHubEvent(**event) for event in data]
+        return [EventFactory.create_event(event) for event in data]
 
     async def get_user_events_paginated(
         self,
@@ -435,7 +424,7 @@ class GitHubClient:
         per_page: int = 100,
         max_pages: int | None = None,
         progress_callback: Callable[[int, int | None], None] | None = None,
-    ) -> AsyncGenerator[list[GitHubEvent], None]:
+    ) -> AsyncGenerator[list[BaseGitHubEvent], None]:
         """Fetch events for a specific user with automatic pagination.
 
         Args:
@@ -459,14 +448,14 @@ class GitHubClient:
             params={"per_page": per_page},
         ):
             data = response.json()
-            yield [GitHubEvent(**event) for event in data]
+            yield [EventFactory.create_event(event) for event in data]
 
     async def get_user_received_events(
         self,
         username: str,
         per_page: int = 100,
         page: int = 1,
-    ) -> list[GitHubEvent]:
+    ) -> list[BaseGitHubEvent]:
         """Fetch events received by a specific user.
 
         Args:
@@ -491,7 +480,7 @@ class GitHubClient:
         self._update_rate_limit_info(response)
         data = response.json()
 
-        return [GitHubEvent(**event) for event in data]
+        return [EventFactory.create_event(event) for event in data]
 
     async def get_user_received_events_paginated(
         self,
@@ -499,7 +488,7 @@ class GitHubClient:
         per_page: int = 100,
         max_pages: int | None = None,
         progress_callback: Callable[[int, int | None], None] | None = None,
-    ) -> AsyncGenerator[list[GitHubEvent], None]:
+    ) -> AsyncGenerator[list[BaseGitHubEvent], None]:
         """Fetch events received by a specific user with automatic pagination.
 
         Args:
@@ -523,7 +512,7 @@ class GitHubClient:
             params={"per_page": per_page},
         ):
             data = response.json()
-            yield [GitHubEvent(**event) for event in data]
+            yield [EventFactory.create_event(event) for event in data]
 
     async def validate_token(self) -> dict[str, Any]:
         """Validate the GitHub token and return user information.

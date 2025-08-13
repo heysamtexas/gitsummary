@@ -11,9 +11,9 @@ from git_summary.github_client import (
     CircuitBreakerError,
     CircuitBreakerState,
     GitHubClient,
-    GitHubEvent,
     RateLimitError,
 )
+from git_summary.models import BaseGitHubEvent, EventFactory, PushEvent
 
 
 class TestRateLimitError:
@@ -223,7 +223,7 @@ class TestGitHubClient:
             events = await client.get_user_events("testuser")
 
             assert len(events) == 1
-            assert isinstance(events[0], GitHubEvent)
+            assert isinstance(events[0], BaseGitHubEvent)
             assert events[0].id == "123"
             assert events[0].type == "PushEvent"
             assert client.rate_limit_remaining == 4999
@@ -253,7 +253,7 @@ class TestGitHubClient:
             events = await client.get_user_received_events("testuser")
 
             assert len(events) == 1
-            assert isinstance(events[0], GitHubEvent)
+            assert isinstance(events[0], BaseGitHubEvent)
             assert events[0].id == "456"
             assert events[0].type == "IssuesEvent"
             assert client.rate_limit_remaining == 4998
@@ -314,20 +314,47 @@ class TestGitHubEvent:
         event_data = {
             "id": "123456789",
             "type": "PushEvent",
-            "actor": {"login": "testuser", "id": 12345},
-            "repo": {"name": "test/repo", "id": 67890},
-            "payload": {"commits": [{"message": "Test commit"}]},
+            "actor": {
+                "id": 12345,
+                "login": "testuser",
+                "url": "https://api.github.com/users/testuser",
+                "avatar_url": "https://avatars.githubusercontent.com/u/12345",
+            },
+            "repo": {
+                "id": 67890,
+                "name": "test/repo",
+                "url": "https://api.github.com/repos/testuser/test-repo",
+            },
+            "payload": {
+                "push_id": 12345,
+                "size": 1,
+                "distinct_size": 1,
+                "ref": "refs/heads/main",
+                "head": "abc123",
+                "before": "def456",
+                "commits": [
+                    {
+                        "sha": "abc123",
+                        "author": {"name": "Test Author", "email": "test@example.com"},
+                        "message": "Test commit",
+                        "distinct": True,
+                        "url": "https://api.github.com/repos/testuser/test-repo/commits/abc123",
+                    }
+                ],
+            },
             "created_at": "2023-01-01T00:00:00Z",
             "public": True,
         }
 
-        event = GitHubEvent(**event_data)  # type: ignore[arg-type]
+        event = EventFactory.create_event(event_data)
 
         assert event.id == "123456789"
         assert event.type == "PushEvent"
-        assert event.actor["login"] == "testuser"
-        assert event.repo["name"] == "test/repo"
-        assert event.payload["commits"][0]["message"] == "Test commit"
+        assert isinstance(event, PushEvent)
+        assert event.actor.login == "testuser"
+        assert event.repo.name == "test/repo"
+        assert len(event.payload.commits) == 1
+        assert event.payload.commits[0].message == "Test commit"
         assert event.created_at == "2023-01-01T00:00:00Z"
         assert event.public is True
 
@@ -831,8 +858,8 @@ class TestPagination:
         assert len(events_pages[1]) == 1
         assert events_pages[0][0].id == "1"
         assert events_pages[1][0].id == "2"
-        assert isinstance(events_pages[0][0], GitHubEvent)
-        assert isinstance(events_pages[1][0], GitHubEvent)
+        assert isinstance(events_pages[0][0], BaseGitHubEvent)
+        assert isinstance(events_pages[1][0], BaseGitHubEvent)
 
     @pytest.mark.asyncio
     async def test_get_user_received_events_paginated(self, client):
@@ -863,4 +890,4 @@ class TestPagination:
         assert len(events_pages) == 1
         assert len(events_pages[0]) == 1
         assert events_pages[0][0].id == "456"
-        assert isinstance(events_pages[0][0], GitHubEvent)
+        assert isinstance(events_pages[0][0], BaseGitHubEvent)
