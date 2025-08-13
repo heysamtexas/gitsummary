@@ -134,9 +134,9 @@ async def _analyze_user_activity(
 
     console.print(
         Panel.fit(
-            f"[bold cyan]Analyzing GitHub Activity[/bold cyan]\\n\\n"
-            f"[white]User:[/white] [green]{user}[/green]\\n"
-            f"[white]Period:[/white] [blue]{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}[/blue]\\n"
+            f"[bold cyan]Analyzing GitHub Activity[/bold cyan]\n\n"
+            f"[white]User:[/white] [green]{user}[/green]\n"
+            f"[white]Period:[/white] [blue]{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}[/blue]\n"
             f"[white]Duration:[/white] [yellow]{days} days[/yellow]",
             title="📊 GitHub Activity Analysis",
         )
