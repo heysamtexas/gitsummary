@@ -142,3 +142,5 @@ uv build
 - Implement minimal required scope permissions
 - Include audit logging for API access
 - Follow data privacy best practices for user activity data
+
+- consult with guilfoyle just after your code lands and iterate if needed. or pause and ask for input from a human

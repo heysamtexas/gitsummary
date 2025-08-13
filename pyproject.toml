@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 authors = [
-    { name = "Sam", email = "sam@example.com" },
+    { name = "Sam Texas", email = "dev@simpelcto.com" },
 ]
 keywords = ["github", "api", "activity", "summary", "tracking"]
 classifiers = [
