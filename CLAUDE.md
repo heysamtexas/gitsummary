@@ -171,4 +171,81 @@ uv build
 4. Push to remote repository
 5. Close ticket with reference to the commit
 
+## Git Worktree Development
+
+For parallel development on multiple GitHub issues, use git worktrees to work on independent features simultaneously.
+
+### Setup Worktrees
+```bash
+# Create worktrees for parallel development
+git worktree add ../git-summary-public-fetcher -b feature/public-events-fetcher
+git worktree add ../git-summary-coordinator -b feature/smart-coordinator
+git worktree add ../git-summary-processing -b feature/event-processing
+
+# List all worktrees
+git worktree list
+```
+
+### Directory Structure
+```
+git-summary/                    # Main worktree (master branch)
+├── src/git_summary/
+└── ...
+git-summary-public-fetcher/     # Feature worktree
+├── src/git_summary/
+└── ...
+git-summary-coordinator/        # Feature worktree
+git-summary-processing/         # Feature worktree
+```
+
+### Parallel Development Workflow
+1. **Main worktree**: Keep on `master` for integration work (Issue #14)
+2. **Feature worktrees**: Work on independent issues:
+   - `feature/public-events-fetcher` - Issue #11 (PublicEventsFetcher)
+   - `feature/smart-coordinator` - Issue #12 (Smart Coordinator)
+   - `feature/event-processing` - Issue #13 (Event Processing)
+
+### Branch Naming Convention
+- Use `feature/issue-name` pattern aligned with GitHub issue titles
+- Keep branch names descriptive and consistent
+- Example: `feature/public-events-fetcher` for Issue #11
+
+### Dependency Management
+```bash
+# Share commits between worktrees when needed
+cd ../git-summary-coordinator
+git cherry-pick feature/public-events-fetcher~1..feature/public-events-fetcher
+```
+
+### Integration Process
+```bash
+# Merge features back to main (from main worktree)
+git merge feature/public-events-fetcher
+git merge feature/smart-coordinator
+git merge feature/event-processing
+
+# Push all branches
+git push origin master
+git push origin feature/public-events-fetcher
+git push origin feature/smart-coordinator
+git push origin feature/event-processing
+```
+
+### Cleanup When Done
+```bash
+# Remove worktrees after feature completion
+git worktree remove ../git-summary-public-fetcher
+git worktree remove ../git-summary-coordinator
+git worktree remove ../git-summary-processing
+
+# Delete feature branches if no longer needed
+git branch -d feature/public-events-fetcher
+git branch -d feature/smart-coordinator
+git branch -d feature/event-processing
+```
+
+### Reference Documentation
+- [Claude Code Best Practices](https://www.anthropic.com/engineering/claude-code-best-practices)
+- [Claude Code Common Workflows](https://docs.anthropic.com/en/docs/claude-code/common-workflows)
+
 - consult with guilfoyle just after your code lands and iterate if needed. or pause and ask for input from a human
