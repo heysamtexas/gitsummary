@@ -143,4 +143,32 @@ uv build
 - Include audit logging for API access
 - Follow data privacy best practices for user activity data
 
+## Git Workflow and Ticket Management
+
+### CRITICAL: Always Commit Before Closing Tickets
+- **NEVER close a GitHub ticket manually** unless there was a mistake or special circumstances
+- **ALWAYS commit and push changes before closing tickets**
+- Every ticket closure should reference a commit that implements the work
+- This ensures traceability and proper version control of all changes
+
+### Commit Guidelines
+- All new files must be added to git (`git add`) before committing
+- Commit messages should be descriptive and reference the ticket being completed
+- Use the standard commit format with co-author attribution:
+  ```
+  Brief description of changes
+
+  🤖 Generated with [Claude Code](https://claude.ai/code)
+
+  Co-Authored-By: Claude <noreply@anthropic.com>
+  ```
+- Always push commits to the remote repository after committing
+
+### Workflow
+1. Complete implementation and testing
+2. Add all new/modified files to git
+3. Create commit with descriptive message
+4. Push to remote repository
+5. Close ticket with reference to the commit
+
 - consult with guilfoyle just after your code lands and iterate if needed. or pause and ask for input from a human
