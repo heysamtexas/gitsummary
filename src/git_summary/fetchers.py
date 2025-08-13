@@ -20,15 +20,17 @@ class AuthenticationError(FetcherError):
 
 
 class UserEventsFetcher:
-    """Fetcher for authenticated user's events via /user/events endpoint."""
+    """Fetcher for authenticated user's events via /users/{username}/events endpoint."""
 
-    def __init__(self, client: GitHubClient) -> None:
-        """Initialize the fetcher with a GitHub client.
+    def __init__(self, client: GitHubClient, username: str) -> None:
+        """Initialize the fetcher with a GitHub client and username.
 
         Args:
             client: GitHub API client for making requests
+            username: GitHub username of the authenticated user
         """
         self.client = client
+        self.username = username
 
     async def fetch_events(
         self,
@@ -53,8 +55,8 @@ class UserEventsFetcher:
             FetcherError: For other API errors
         """
         try:
-            # Build URL with optional since parameter
-            url = f"{self.client.base_url}/user/events"
+            # Build URL with optional since parameter - use /users/{username}/events for authenticated access
+            url = f"{self.client.base_url}/users/{self.username}/events"
             params: dict[str, Any] = {"per_page": 100}
 
             if since:
@@ -62,7 +64,7 @@ class UserEventsFetcher:
                 params["since"] = since.isoformat()
 
             logger.info(
-                f"Fetching user events since {since}, max_pages={max_pages}, max_events={max_events}"
+                f"Fetching authenticated user events for {self.username} since {since}, max_pages={max_pages}, max_events={max_events}"
             )
 
             events_yielded = 0
@@ -104,7 +106,7 @@ class UserEventsFetcher:
                 and e.response.status_code in (401, 403)
             ):
                 logger.error(
-                    f"Authentication failed for /user/events: HTTP {e.response.status_code}"
+                    f"Authentication failed for /users/{self.username}/events: HTTP {e.response.status_code}"
                 )
                 raise AuthenticationError(
                     f"GitHub authentication failed (HTTP {e.response.status_code}) when fetching user events. "
@@ -116,7 +118,7 @@ class UserEventsFetcher:
 
             # Re-raise other errors as FetcherError with more context
             raise FetcherError(
-                f"Failed to fetch user events from GitHub API. "
+                f"Failed to fetch authenticated user events for {self.username} from GitHub API. "
                 f"Parameters: since={since}, max_pages={max_pages}. "
                 f"Error: {e}"
             ) from e
@@ -393,7 +395,6 @@ class EventCoordinator:
         """
         self.client = client
         self._authenticated_user: str | None = None
-        self._user_fetcher = UserEventsFetcher(client)
 
     async def get_authenticated_user(self) -> str | None:
         """Get the authenticated user's login name.
@@ -462,7 +463,8 @@ class EventCoordinator:
         if authenticated_user and username.lower() == authenticated_user.lower():
             logger.info(f"Using UserEventsFetcher for authenticated user {username}")
             try:
-                async for event in self._user_fetcher.fetch_events(
+                user_fetcher = UserEventsFetcher(self.client, authenticated_user)
+                async for event in user_fetcher.fetch_events(
                     since, max_pages, max_events, progress_callback
                 ):
                     yield event
@@ -487,7 +489,8 @@ class EventCoordinator:
                 logger.warning(
                     f"Public fetcher failed, retrying with UserEventsFetcher: {e}"
                 )
-                async for event in self._user_fetcher.fetch_events(
+                user_fetcher = UserEventsFetcher(self.client, authenticated_user)
+                async for event in user_fetcher.fetch_events(
                     since, max_pages, max_events, progress_callback
                 ):
                     yield event

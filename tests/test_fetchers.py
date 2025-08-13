@@ -29,7 +29,7 @@ class TestUserEventsFetcher:
     @pytest.fixture
     def fetcher(self, client):
         """Create a UserEventsFetcher for testing."""
-        return UserEventsFetcher(client)
+        return UserEventsFetcher(client, "testuser")
 
     @pytest.fixture
     def mock_event_data(self):
@@ -71,8 +71,9 @@ class TestUserEventsFetcher:
 
     def test_fetcher_initialization(self, client):
         """Test fetcher initialization."""
-        fetcher = UserEventsFetcher(client)
+        fetcher = UserEventsFetcher(client, "testuser")
         assert fetcher.client == client
+        assert fetcher.username == "testuser"
 
     @pytest.mark.asyncio
     async def test_fetch_events_success(self, fetcher, mock_event_data):
@@ -551,7 +552,7 @@ class TestUserEventsFetcherIntegration:
     @pytest.fixture
     def integration_fetcher(self, integration_client):
         """Create a real UserEventsFetcher for integration tests."""
-        return UserEventsFetcher(integration_client)
+        return UserEventsFetcher(integration_client, "octocat")
 
     @pytest.mark.asyncio
     async def test_fetch_user_events_real_api(self, integration_fetcher):
@@ -627,7 +628,7 @@ class TestUserEventsFetcherIntegration:
     async def test_invalid_token_authentication_error(self):
         """Test that invalid token raises AuthenticationError."""
         invalid_client = GitHubClient(token="invalid_token")
-        invalid_fetcher = UserEventsFetcher(invalid_client)
+        invalid_fetcher = UserEventsFetcher(invalid_client, "testuser")
 
         with pytest.raises(AuthenticationError) as exc_info:
             events = []
@@ -1224,7 +1225,6 @@ class TestEventCoordinator:
         coordinator = EventCoordinator(client)
         assert coordinator.client == client
         assert coordinator._authenticated_user is None
-        assert isinstance(coordinator._user_fetcher, UserEventsFetcher)
 
     @pytest.mark.asyncio
     async def test_get_authenticated_user_success(self, coordinator):
