@@ -380,3 +380,198 @@ class PublicEventsFetcher:
             f"Fetched {len(events)} public events for user '{self.username}' in date range"
         )
         return events
+
+
+class EventCoordinator:
+    """Smart coordinator that selects optimal fetching strategy based on authentication and user context."""
+
+    def __init__(self, client: GitHubClient) -> None:
+        """Initialize the coordinator with a GitHub client.
+
+        Args:
+            client: GitHub API client for making requests
+        """
+        self.client = client
+        self._authenticated_user: str | None = None
+        self._user_fetcher = UserEventsFetcher(client)
+
+    async def get_authenticated_user(self) -> str | None:
+        """Get the authenticated user's login name.
+
+        Returns:
+            Username of the authenticated user, or None if not authenticated
+
+        Raises:
+            FetcherError: If API request fails
+        """
+        if self._authenticated_user is not None:
+            return self._authenticated_user
+
+        try:
+            url = f"{self.client.base_url}/user"
+
+            async for response in self.client.paginate(
+                url, max_pages=1, headers=self.client.headers
+            ):
+                data = response.json()
+                self._authenticated_user = data.get("login")
+                logger.info(f"Detected authenticated user: {self._authenticated_user}")
+                return self._authenticated_user
+
+        except Exception as e:
+            if (
+                hasattr(e, "response")
+                and hasattr(e.response, "status_code")
+                and e.response.status_code in (401, 403)
+            ):
+                logger.info("No valid authentication detected")
+                return None
+
+            logger.error(f"Failed to get authenticated user: {e}")
+            raise FetcherError(f"Failed to detect authenticated user: {e}") from e
+
+        return None
+
+    async def fetch_events(
+        self,
+        username: str,
+        since: datetime | None = None,
+        max_pages: int | None = None,
+        max_events: int | None = None,
+        progress_callback: Callable[[int, int | None], None] | None = None,
+    ) -> AsyncGenerator[BaseGitHubEvent, None]:
+        """Fetch events using optimal strategy based on authentication context.
+
+        Args:
+            username: GitHub username to fetch events for
+            since: Only events after this datetime
+            max_pages: Maximum number of pages to fetch (None for unlimited)
+            max_events: Maximum number of events to yield (None for unlimited)
+            progress_callback: Optional callback for progress updates
+
+        Yields:
+            BaseGitHubEvent: Individual GitHub events
+
+        Raises:
+            AuthenticationError: If authentication is required but fails
+            FetcherError: For other API errors
+        """
+        authenticated_user = await self.get_authenticated_user()
+
+        # Use UserEventsFetcher if requesting own events
+        if authenticated_user and username.lower() == authenticated_user.lower():
+            logger.info(f"Using UserEventsFetcher for authenticated user {username}")
+            try:
+                async for event in self._user_fetcher.fetch_events(
+                    since, max_pages, max_events, progress_callback
+                ):
+                    yield event
+                return
+            except Exception as e:
+                logger.warning(
+                    f"UserEventsFetcher failed: {e}, falling back to public fetcher"
+                )
+                # Fall through to public fetcher
+
+        # Use PublicEventsFetcher for other users or as fallback
+        logger.info(f"Using PublicEventsFetcher for user {username}")
+        try:
+            public_fetcher = PublicEventsFetcher(self.client, username)
+            async for event in public_fetcher.fetch_events(
+                since, max_pages, max_events, progress_callback
+            ):
+                yield event
+        except Exception as e:
+            # If authenticated and public fetcher fails, try user fetcher as last resort
+            if authenticated_user and username.lower() == authenticated_user.lower():
+                logger.warning(
+                    f"Public fetcher failed, retrying with UserEventsFetcher: {e}"
+                )
+                async for event in self._user_fetcher.fetch_events(
+                    since, max_pages, max_events, progress_callback
+                ):
+                    yield event
+            else:
+                raise
+
+    async def fetch_events_list(
+        self,
+        username: str,
+        since: datetime | None = None,
+        max_pages: int | None = None,
+        max_events: int | None = None,
+        progress_callback: Callable[[int, int | None], None] | None = None,
+    ) -> list[BaseGitHubEvent]:
+        """Fetch events using optimal strategy and return as a list.
+
+        Args:
+            username: GitHub username to fetch events for
+            since: Only events after this datetime
+            max_pages: Maximum number of pages to fetch
+            max_events: Maximum number of events to return
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            List of GitHub events
+
+        Raises:
+            AuthenticationError: If authentication is required but fails
+            FetcherError: For other API errors
+        """
+        events = []
+        async for event in self.fetch_events(
+            username, since, max_pages, max_events, progress_callback
+        ):
+            events.append(event)
+
+        logger.info(
+            f"Fetched {len(events)} events for {username} using smart coordination"
+        )
+        return events
+
+    async def fetch_events_by_date_range(
+        self,
+        username: str,
+        start_date: datetime,
+        end_date: datetime,
+        max_pages: int | None = None,
+        max_events: int | None = None,
+        progress_callback: Callable[[int, int | None], None] | None = None,
+    ) -> list[BaseGitHubEvent]:
+        """Fetch events within a specific date range using optimal strategy.
+
+        Args:
+            username: GitHub username to fetch events for
+            start_date: Start of date range (inclusive)
+            end_date: End of date range (inclusive)
+            max_pages: Maximum number of pages to fetch
+            max_events: Maximum number of events to return
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            List of GitHub events within the date range
+
+        Raises:
+            AuthenticationError: If authentication is required but fails
+            FetcherError: For other API errors
+        """
+        logger.info(
+            f"Fetching events for {username} from {start_date} to {end_date}, max_events={max_events}"
+        )
+
+        events = []
+        async for event in self.fetch_events(
+            username, start_date, max_pages, max_events, progress_callback
+        ):
+            # Parse event timestamp and filter by end_date
+            event_time = datetime.fromisoformat(event.created_at.replace("Z", "+00:00"))
+
+            if event_time > end_date:
+                continue  # Skip events after end_date
+
+            events.append(event)
+
+        logger.info(
+            f"Fetched {len(events)} events for {username} in date range using smart coordination"
+        )
+        return events

@@ -9,6 +9,7 @@ import pytest
 
 from git_summary.fetchers import (
     AuthenticationError,
+    EventCoordinator,
     FetcherError,
     PublicEventsFetcher,
     UserEventsFetcher,
@@ -1165,3 +1166,413 @@ class TestPublicEventsFetcherIntegration:
 
         # Should get events without authentication issues
         assert isinstance(events, list)
+
+
+class TestEventCoordinator:
+    """Test the EventCoordinator class."""
+
+    @pytest.fixture
+    def client(self):
+        """Create a GitHub client for testing."""
+        return GitHubClient(token="test_token")
+
+    @pytest.fixture
+    def coordinator(self, client):
+        """Create an EventCoordinator for testing."""
+        return EventCoordinator(client)
+
+    @pytest.fixture
+    def mock_event_data(self):
+        """Mock GitHub event data."""
+        return {
+            "id": "123456789",
+            "type": "PushEvent",
+            "actor": {
+                "id": 12345,
+                "login": "testuser",
+                "url": "https://api.github.com/users/testuser",
+                "avatar_url": "https://avatars.githubusercontent.com/u/12345",
+            },
+            "repo": {
+                "id": 67890,
+                "name": "test/repo",
+                "url": "https://api.github.com/repos/test/repo",
+            },
+            "payload": {
+                "push_id": 12345,
+                "size": 1,
+                "distinct_size": 1,
+                "ref": "refs/heads/main",
+                "head": "abc123",
+                "before": "def456",
+                "commits": [
+                    {
+                        "sha": "abc123",
+                        "author": {"name": "Test Author", "email": "test@example.com"},
+                        "message": "Test commit",
+                        "distinct": True,
+                        "url": "https://api.github.com/repos/test/repo/commits/abc123",
+                    }
+                ],
+            },
+            "created_at": "2023-01-01T12:00:00Z",
+            "public": True,
+        }
+
+    def test_coordinator_initialization(self, client):
+        """Test coordinator initialization."""
+        coordinator = EventCoordinator(client)
+        assert coordinator.client == client
+        assert coordinator._authenticated_user is None
+        assert isinstance(coordinator._user_fetcher, UserEventsFetcher)
+
+    @pytest.mark.asyncio
+    async def test_get_authenticated_user_success(self, coordinator):
+        """Test successful authenticated user detection."""
+        mock_response = Mock()
+        mock_response.json.return_value = {"login": "authenticated_user"}
+        mock_response.headers = {"x-ratelimit-remaining": "5000"}
+
+        async def mock_paginate(*args, **kwargs):
+            yield mock_response
+
+        with patch.object(coordinator.client, "paginate", mock_paginate):
+            user = await coordinator.get_authenticated_user()
+
+            assert user == "authenticated_user"
+            assert coordinator._authenticated_user == "authenticated_user"
+
+    @pytest.mark.asyncio
+    async def test_get_authenticated_user_no_auth(self, coordinator):
+        """Test authenticated user detection with no authentication."""
+        mock_response = Mock()
+        mock_response.status_code = 401
+        auth_error = httpx.HTTPStatusError(
+            "Unauthorized", request=Mock(), response=mock_response
+        )
+
+        async def mock_paginate(*args, **kwargs):
+            if False:  # Never executed, just for type checking
+                yield  # type: ignore[unreachable]
+            raise auth_error
+
+        with patch.object(coordinator.client, "paginate", mock_paginate):
+            user = await coordinator.get_authenticated_user()
+
+            assert user is None
+            assert coordinator._authenticated_user is None
+
+    @pytest.mark.asyncio
+    async def test_get_authenticated_user_caching(self, coordinator):
+        """Test that authenticated user is cached after first request."""
+        coordinator._authenticated_user = "cached_user"
+
+        # Should not make API call if user is already cached
+        user = await coordinator.get_authenticated_user()
+        assert user == "cached_user"
+
+    @pytest.mark.asyncio
+    async def test_fetch_events_own_user_authenticated(
+        self, coordinator, mock_event_data
+    ):
+        """Test fetching events for authenticated user uses UserEventsFetcher."""
+        # Mock authentication
+        coordinator._authenticated_user = "testuser"
+
+        mock_response = Mock()
+        mock_response.json.return_value = [mock_event_data]
+        mock_response.headers = {"x-ratelimit-remaining": "5000"}
+
+        async def mock_paginate(*args, **kwargs):
+            yield mock_response
+
+        with patch.object(coordinator.client, "paginate", mock_paginate):
+            events = []
+            async for event in coordinator.fetch_events("testuser"):
+                events.append(event)
+
+            assert len(events) == 1
+            assert events[0].id == "123456789"
+
+    @pytest.mark.asyncio
+    async def test_fetch_events_other_user_public(self, coordinator, mock_event_data):
+        """Test fetching events for other user uses PublicEventsFetcher."""
+        # Mock authentication as different user
+        coordinator._authenticated_user = "authenticated_user"
+
+        mock_response = Mock()
+        mock_response.json.return_value = [mock_event_data]
+        mock_response.headers = {"x-ratelimit-remaining": "5000"}
+
+        async def mock_paginate(*args, **kwargs):
+            yield mock_response
+
+        with patch.object(coordinator.client, "paginate", mock_paginate):
+            events = []
+            async for event in coordinator.fetch_events("other_user"):
+                events.append(event)
+
+            assert len(events) == 1
+            assert events[0].id == "123456789"
+
+    @pytest.mark.asyncio
+    async def test_fetch_events_no_authentication(self, coordinator, mock_event_data):
+        """Test fetching events without authentication uses PublicEventsFetcher."""
+        # Mock no authentication
+        coordinator._authenticated_user = None
+
+        mock_response = Mock()
+        mock_response.json.return_value = [mock_event_data]
+        mock_response.headers = {"x-ratelimit-remaining": "5000"}
+
+        async def mock_paginate(*args, **kwargs):
+            # First call to get_authenticated_user returns 401
+            if "/user" in args[0] and "/users/" not in args[0]:
+                mock_auth_response = Mock()
+                mock_auth_response.status_code = 401
+                auth_error = httpx.HTTPStatusError(
+                    "Unauthorized", request=Mock(), response=mock_auth_response
+                )
+                raise auth_error
+            else:
+                yield mock_response
+
+        with patch.object(coordinator.client, "paginate", mock_paginate):
+            events = []
+            async for event in coordinator.fetch_events("any_user"):
+                events.append(event)
+
+            assert len(events) == 1
+            assert events[0].id == "123456789"
+
+    @pytest.mark.asyncio
+    async def test_fetch_events_user_fallback_to_public(
+        self, coordinator, mock_event_data
+    ):
+        """Test fallback from UserEventsFetcher to PublicEventsFetcher."""
+        # Mock authentication
+        coordinator._authenticated_user = "testuser"
+
+        mock_response = Mock()
+        mock_response.json.return_value = [mock_event_data]
+        mock_response.headers = {"x-ratelimit-remaining": "5000"}
+
+        call_count = 0
+
+        async def mock_paginate(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+
+            # First call (/user/events) fails, second call (/users/testuser/events/public) succeeds
+            if call_count == 1:
+                raise httpx.NetworkError("User fetcher failed")
+            else:
+                yield mock_response
+
+        with patch.object(coordinator.client, "paginate", mock_paginate):
+            events = []
+            async for event in coordinator.fetch_events("testuser"):
+                events.append(event)
+
+            assert len(events) == 1
+            assert events[0].id == "123456789"
+            assert call_count == 2  # Should have made two attempts
+
+    @pytest.mark.asyncio
+    async def test_fetch_events_public_fallback_to_user(
+        self, coordinator, mock_event_data
+    ):
+        """Test fallback from PublicEventsFetcher to UserEventsFetcher for own user."""
+        # Mock authentication
+        coordinator._authenticated_user = "testuser"
+
+        mock_response = Mock()
+        mock_response.json.return_value = [mock_event_data]
+        mock_response.headers = {"x-ratelimit-remaining": "5000"}
+
+        call_count = 0
+
+        async def mock_paginate(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+
+            # First call (/user/events) fails, second call (/users/testuser/events/public) fails,
+            # third call (/user/events) as fallback succeeds
+            if call_count <= 2:
+                if call_count == 1:
+                    raise httpx.NetworkError("User fetcher failed initially")
+                else:
+                    raise httpx.NetworkError("Public fetcher failed")
+            else:
+                yield mock_response
+
+        with patch.object(coordinator.client, "paginate", mock_paginate):
+            events = []
+            async for event in coordinator.fetch_events("testuser"):
+                events.append(event)
+
+            assert len(events) == 1
+            assert events[0].id == "123456789"
+            assert call_count == 3  # Should have made three attempts
+
+    @pytest.mark.asyncio
+    async def test_fetch_events_list(self, coordinator, mock_event_data):
+        """Test fetch_events_list method."""
+        coordinator._authenticated_user = "testuser"
+
+        mock_response = Mock()
+        mock_response.json.return_value = [mock_event_data, mock_event_data]
+        mock_response.headers = {"x-ratelimit-remaining": "5000"}
+
+        async def mock_paginate(*args, **kwargs):
+            yield mock_response
+
+        with patch.object(coordinator.client, "paginate", mock_paginate):
+            events = await coordinator.fetch_events_list("testuser")
+
+            assert isinstance(events, list)
+            assert len(events) == 2
+            assert all(isinstance(event, BaseGitHubEvent) for event in events)
+
+    @pytest.mark.asyncio
+    async def test_fetch_events_by_date_range(self, coordinator):
+        """Test fetch_events_by_date_range method."""
+        start_date = datetime(2023, 1, 1, tzinfo=UTC)
+        end_date = datetime(2023, 1, 31, tzinfo=UTC)
+
+        coordinator._authenticated_user = "testuser"
+
+        # Create events with different timestamps
+        event_in_range = {
+            "id": "123",
+            "type": "PushEvent",
+            "actor": {"login": "testuser"},
+            "repo": {"name": "test"},
+            "created_at": "2023-01-15T12:00:00Z",  # Within range
+            "public": True,
+            "payload": {
+                "commits": [],
+                "push_id": 1,
+                "size": 0,
+                "distinct_size": 0,
+                "ref": "main",
+                "head": "abc",
+                "before": "def",
+            },
+        }
+        event_out_of_range = {
+            "id": "456",
+            "type": "PushEvent",
+            "actor": {"login": "testuser"},
+            "repo": {"name": "test"},
+            "created_at": "2023-02-15T12:00:00Z",  # Outside range
+            "public": True,
+            "payload": {
+                "commits": [],
+                "push_id": 2,
+                "size": 0,
+                "distinct_size": 0,
+                "ref": "main",
+                "head": "def",
+                "before": "ghi",
+            },
+        }
+
+        mock_response = Mock()
+        mock_response.json.return_value = [event_in_range, event_out_of_range]
+        mock_response.headers = {"x-ratelimit-remaining": "5000"}
+
+        async def mock_paginate(*args, **kwargs):
+            yield mock_response
+
+        with patch.object(coordinator.client, "paginate", mock_paginate):
+            events = await coordinator.fetch_events_by_date_range(
+                "testuser", start_date, end_date
+            )
+
+            # Should only get events within the date range
+            assert len(events) == 1
+            assert events[0].id == "123"
+
+    @pytest.mark.asyncio
+    async def test_fetch_events_authentication_error_propagation(self, coordinator):
+        """Test that authentication errors are properly propagated."""
+        coordinator._authenticated_user = "testuser"
+
+        mock_response = Mock()
+        mock_response.status_code = 401
+        auth_error = httpx.HTTPStatusError(
+            "Unauthorized", request=Mock(), response=mock_response
+        )
+
+        async def mock_paginate(*args, **kwargs):
+            if False:  # Never executed, just for type checking
+                yield  # type: ignore[unreachable]
+            raise auth_error
+
+        with patch.object(coordinator.client, "paginate", mock_paginate), pytest.raises(
+            AuthenticationError
+        ):
+            events = []
+            async for event in coordinator.fetch_events("testuser"):
+                events.append(event)
+
+    @pytest.mark.asyncio
+    async def test_fetch_events_other_error_propagation(self, coordinator):
+        """Test that other errors are properly propagated."""
+        coordinator._authenticated_user = None
+
+        network_error = httpx.NetworkError("Network failed")
+
+        async def mock_paginate(*args, **kwargs):
+            if "/user" in args[0]:
+                # Mock no authentication
+                mock_auth_response = Mock()
+                mock_auth_response.status_code = 401
+                auth_error = httpx.HTTPStatusError(
+                    "Unauthorized", request=Mock(), response=mock_auth_response
+                )
+                raise auth_error
+            else:
+                # Public fetcher fails with network error
+                if False:  # Never executed, just for type checking
+                    yield  # type: ignore[unreachable]
+                raise network_error
+
+        with patch.object(coordinator.client, "paginate", mock_paginate), pytest.raises(
+            FetcherError
+        ):
+            events = []
+            async for event in coordinator.fetch_events("other_user"):
+                events.append(event)
+
+    @pytest.mark.asyncio
+    async def test_fetch_events_with_parameters(self, coordinator, mock_event_data):
+        """Test that parameters are passed correctly to underlying fetchers."""
+        coordinator._authenticated_user = "testuser"
+        since_date = datetime(2023, 1, 1, tzinfo=UTC)
+
+        mock_response = Mock()
+        mock_response.json.return_value = [mock_event_data]
+        mock_response.headers = {"x-ratelimit-remaining": "5000"}
+
+        paginate_args = None
+
+        async def mock_paginate(*args, **kwargs):
+            nonlocal paginate_args
+            paginate_args = (args, kwargs)
+            yield mock_response
+
+        with patch.object(coordinator.client, "paginate", mock_paginate):
+            events = []
+            async for event in coordinator.fetch_events(
+                "testuser", since=since_date, max_pages=5, max_events=10
+            ):
+                events.append(event)
+
+            # Verify parameters were passed correctly
+            assert paginate_args is not None
+            params = paginate_args[1].get("params", {})
+            assert "since" in params
+            assert params["since"] == since_date.isoformat()
+            assert paginate_args[1].get("max_pages") == 5
