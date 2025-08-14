@@ -88,17 +88,17 @@ def summary(
     comprehensive: bool = typer.Option(
         False,
         "--comprehensive",
-        help="Force comprehensive multi-source discovery mode (for power users)",
+        help="Force comprehensive analysis using multi-source discovery. Overcomes 300-event API limit for complete activity coverage. Best for power users and automation accounts.",
     ),
     max_repos: int | None = typer.Option(
         None,
         "--max-repos",
-        help="Maximum number of repositories to analyze (default varies by strategy)",
+        help="Limit number of repositories analyzed. Adaptive strategy auto-selects optimal defaults (15 for intelligence-guided, 25-50 for comprehensive). Use to optimize performance.",
     ),
     force_strategy: str | None = typer.Option(
         None,
         "--force-strategy",
-        help="Force specific strategy: 'intelligence_guided' or 'multi_source' (mainly for testing)",
+        help="Override automatic strategy selection. Options: 'intelligence_guided' (fast, top repos) or 'multi_source' (comprehensive, all activity). Mainly for testing.",
     ),
     # Legacy filtering options (MVP - not implemented yet)
     include_events: str | None = typer.Option(
