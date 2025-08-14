@@ -8,7 +8,12 @@ import logging
 from typing import Any
 
 from git_summary.ai.client import LLMClient
-from git_summary.ai.context import ContextGatheringEngine, GitHubEventLike, RichContext, TokenBudget
+from git_summary.ai.context import (
+    ContextGatheringEngine,
+    GitHubEventLike,
+    RichContext,
+    TokenBudget,
+)
 from git_summary.ai.personas import PersonaManager
 from git_summary.github_client import GitHubClient
 
@@ -24,6 +29,7 @@ class ActivitySummarizer:
         llm_client: LLMClient | None = None,
         persona_manager: PersonaManager | None = None,
         default_token_budget: int = 8000,
+        fetch_commit_stats: bool = True,
     ) -> None:
         """Initialize the Activity Summarizer.
 
@@ -32,12 +38,15 @@ class ActivitySummarizer:
             llm_client: LiteLLM client for AI generation (creates default if None)
             persona_manager: Persona manager for different analysis styles (creates default if None)
             default_token_budget: Default token budget for context gathering
+            fetch_commit_stats: Whether to fetch detailed commit statistics (increases API usage)
         """
         self.github_client = github_client
         self.llm_client = llm_client or LLMClient()
         self.persona_manager = persona_manager or PersonaManager()
         self.context_engine = ContextGatheringEngine(
-            github_client, default_budget=default_token_budget
+            github_client,
+            default_budget=default_token_budget,
+            fetch_commit_stats=fetch_commit_stats,
         )
         self.default_token_budget = default_token_budget
 
@@ -101,7 +110,10 @@ class ActivitySummarizer:
 
             logger.info("Summary generated successfully")
 
-            # Step 5: Prepare response
+            # Step 5: Calculate line change metrics
+            line_metrics = self._calculate_line_metrics(rich_context)
+
+            # Prepare response
             response = {
                 "summary": summary_text.strip(),
                 "persona_used": persona_name,
@@ -111,6 +123,7 @@ class ActivitySummarizer:
                     "tokens_used": rich_context.estimated_tokens,
                     "date_range": rich_context.date_range,
                     "repositories": rich_context.repositories,
+                    "line_changes": line_metrics,
                     "event_breakdown": {
                         "commits": len(rich_context.commits),
                         "pull_requests": len(rich_context.pull_requests),
@@ -252,6 +265,47 @@ class ActivitySummarizer:
         """
         personas = self.persona_manager.list_personas()
         return [persona.name.lower().replace(" ", "_") for persona in personas]
+
+    def _calculate_line_metrics(self, rich_context: RichContext) -> dict[str, Any]:
+        """Calculate line change metrics from commits and pull requests.
+
+        Args:
+            rich_context: RichContext object with gathered GitHub data
+
+        Returns:
+            Dictionary with line change statistics
+        """
+        total_additions = 0
+        total_deletions = 0
+        files_changed = 0
+
+        # Calculate from commits
+        for commit in rich_context.commits:
+            total_additions += commit.get("additions", 0)
+            total_deletions += commit.get("deletions", 0)
+            files_changed += commit.get("files_changed", 0)
+
+        # Also include PR data (might have additional line changes not in commits)
+        for _pr in rich_context.pull_requests:
+            # Only add if not already counted in commits (avoid double counting)
+            # For now, we'll primarily rely on commit data as it's more accurate
+            pass
+
+        net_lines = total_additions - total_deletions
+
+        return {
+            "lines_added": total_additions,
+            "lines_deleted": total_deletions,
+            "net_lines": net_lines,
+            "files_changed": files_changed,
+            "commits_with_changes": len(
+                [
+                    c
+                    for c in rich_context.commits
+                    if c.get("additions", 0) > 0 or c.get("deletions", 0) > 0
+                ]
+            ),
+        }
 
     def _format_context_for_llm(self, rich_context: RichContext) -> dict[str, Any]:
         """Format rich context data for LLM consumption.

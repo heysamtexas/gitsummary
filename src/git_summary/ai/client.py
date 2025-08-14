@@ -11,6 +11,8 @@ from typing import Any
 import litellm
 from litellm import acompletion, completion
 
+from git_summary.config import Config
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,8 +43,8 @@ class LLMClient:
 
     def __init__(
         self,
-        model: str = "gpt-4o-mini",
-        fallback_model: str = "anthropic/claude-3-haiku-20240307",
+        model: str = "anthropic/claude-3-7-sonnet-latest",
+        fallback_model: str = "groq/llama-3.1-70b-versatile",
         max_tokens: int = 2000,
         temperature: float = 0.7,
         timeout: int = 30,
@@ -50,7 +52,7 @@ class LLMClient:
         """Initialize the LLM client.
 
         Args:
-            model: Primary model to use (e.g., "gpt-4o-mini", "anthropic/claude-3-5-sonnet-20241022")
+            model: Primary model to use (e.g., "anthropic/claude-3-7-sonnet-latest", "groq/llama-3.1-70b-versatile")
             fallback_model: Fallback model if primary fails
             max_tokens: Maximum tokens in response
             temperature: Response creativity (0.0-1.0)
@@ -63,8 +65,11 @@ class LLMClient:
         self.timeout = timeout
 
         # Configure LiteLLM
-        litellm.set_verbose = False  # We handle our own logging
+        litellm.set_verbose = False  # type: ignore[attr-defined]  # We handle our own logging
         litellm.drop_params = True  # Drop unsupported parameters gracefully
+
+        # Set up API keys from config
+        self._setup_api_keys()
 
         # Validate API keys are available
         self._validate_api_keys()
@@ -72,6 +77,38 @@ class LLMClient:
         logger.info(
             f"Initialized LLM client with model: {model}, fallback: {fallback_model}"
         )
+
+    def _setup_api_keys(self) -> None:
+        """Set up API keys from config file, falling back to environment variables."""
+        config = Config()
+
+        # Set OpenAI API key if available in config and not already in environment
+        if not os.getenv("OPENAI_API_KEY"):
+            openai_key = config.get_ai_api_key("openai")
+            if openai_key:
+                os.environ["OPENAI_API_KEY"] = openai_key
+                logger.debug("Set OPENAI_API_KEY from config")
+
+        # Set Anthropic API key if available in config and not already in environment
+        if not os.getenv("ANTHROPIC_API_KEY"):
+            anthropic_key = config.get_ai_api_key("anthropic")
+            if anthropic_key:
+                os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+                logger.debug("Set ANTHROPIC_API_KEY from config")
+
+        # Set Google API key if available in config and not already in environment
+        if not os.getenv("GOOGLE_API_KEY") and not os.getenv("GEMINI_API_KEY"):
+            google_key = config.get_ai_api_key("google")
+            if google_key:
+                os.environ["GOOGLE_API_KEY"] = google_key
+                logger.debug("Set GOOGLE_API_KEY from config")
+
+        # Set Groq API key if available in config and not already in environment
+        if not os.getenv("GROQ_API_KEY"):
+            groq_key = config.get_ai_api_key("groq")
+            if groq_key:
+                os.environ["GROQ_API_KEY"] = groq_key
+                logger.debug("Set GROQ_API_KEY from config")
 
     def _validate_api_keys(self) -> None:
         """Validate that required API keys are available."""
@@ -94,6 +131,9 @@ class LLMClient:
             and not os.getenv("GEMINI_API_KEY")
         ):
             required_keys.append("GOOGLE_API_KEY or GEMINI_API_KEY")
+
+        if ("groq" in self.model.lower()) and not os.getenv("GROQ_API_KEY"):
+            required_keys.append("GROQ_API_KEY")
 
         if required_keys:
             logger.warning(
@@ -285,6 +325,11 @@ class LLMClient:
             "gpt-4o": {"input": 2.50, "output": 10.00},
             "claude-3-haiku": {"input": 0.25, "output": 1.25},
             "claude-3-5-sonnet": {"input": 3.00, "output": 15.00},
+            "claude-3-7-sonnet": {"input": 3.00, "output": 15.00},  # estimated
+            "llama-3.1-70b": {"input": 0.59, "output": 0.79},  # Groq pricing
+            "llama-3.1-8b": {"input": 0.05, "output": 0.08},  # Groq pricing
+            "mixtral-8x7b": {"input": 0.24, "output": 0.24},  # Groq pricing
+            "gemini-1.5-pro": {"input": 3.50, "output": 10.50},  # Google pricing
         }
 
         # Find matching cost estimate
@@ -321,33 +366,73 @@ class LLMClient:
         """
         return [
             {
+                "name": "anthropic/claude-3-7-sonnet-latest",
+                "provider": "Anthropic",
+                "description": "Latest Claude 3.7 Sonnet with large context window (default)",
+                "cost_tier": "Medium",
+                "context_window": "200K",
+            },
+            {
+                "name": "groq/llama-3.1-70b-versatile",
+                "provider": "Groq",
+                "description": "High-quality model with fast inference (fallback)",
+                "cost_tier": "Low",
+                "context_window": "131K",
+            },
+            {
+                "name": "groq/llama-3.1-8b-instant",
+                "provider": "Groq",
+                "description": "Very fast model for quick summaries",
+                "cost_tier": "Low",
+                "context_window": "131K",
+            },
+            {
+                "name": "groq/mixtral-8x7b-32768",
+                "provider": "Groq",
+                "description": "Balanced performance model",
+                "cost_tier": "Low",
+                "context_window": "32K",
+            },
+            {
                 "name": "gpt-4o-mini",
                 "provider": "OpenAI",
                 "description": "Fast, cost-effective model for most tasks",
                 "cost_tier": "Low",
+                "context_window": "128K",
             },
             {
                 "name": "gpt-4o",
                 "provider": "OpenAI",
                 "description": "High-quality model for complex analysis",
                 "cost_tier": "Medium",
+                "context_window": "128K",
             },
             {
                 "name": "anthropic/claude-3-haiku-20240307",
                 "provider": "Anthropic",
                 "description": "Fast, efficient model for quick summaries",
                 "cost_tier": "Low",
+                "context_window": "200K",
             },
             {
                 "name": "anthropic/claude-3-5-sonnet-20241022",
                 "provider": "Anthropic",
                 "description": "Advanced model for detailed analysis",
                 "cost_tier": "Medium",
+                "context_window": "200K",
+            },
+            {
+                "name": "google/gemini-1.5-pro",
+                "provider": "Google",
+                "description": "Large context model for comprehensive analysis",
+                "cost_tier": "Medium",
+                "context_window": "2M",
             },
             {
                 "name": "ollama/llama3.1",
                 "provider": "Local (Ollama)",
                 "description": "Local model for private usage",
                 "cost_tier": "Free",
+                "context_window": "128K",
             },
         ]

@@ -4,7 +4,10 @@ import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from git_summary.ai.context import GitHubEventLike
 
 import typer
 from rich import print
@@ -14,6 +17,8 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from git_summary.ai.orchestrator import ActivitySummarizer
+from git_summary.ai.personas import PersonaManager
 from git_summary.config import Config
 from git_summary.fetchers import EventCoordinator
 from git_summary.github_client import GitHubClient
@@ -132,6 +137,444 @@ def summary(
     except Exception as e:
         print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
+
+
+@app.command("ai-summary")
+def ai_summary(
+    user: str = typer.Argument(None, help="GitHub username to analyze"),
+    token: str | None = typer.Option(
+        None,
+        "--token",
+        "-t",
+        help="GitHub Personal Access Token (or set GITHUB_TOKEN env var)",
+        envvar="GITHUB_TOKEN",
+    ),
+    model: str = typer.Option(
+        "anthropic/claude-3-7-sonnet-latest",
+        "--model",
+        "-m",
+        help="AI model to use (e.g., claude-3-7-sonnet-latest, groq/llama-3.1-70b-versatile, gpt-4o-mini)",
+    ),
+    persona: str = typer.Option(
+        "tech analyst",
+        "--persona",
+        "-p",
+        help="Analysis persona to use (tech_analyst, etc.)",
+    ),
+    days: int = typer.Option(7, "--days", "-d", help="Number of days to analyze"),
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output file (.md or .json format). If not specified, prints to stdout",
+    ),
+    max_events: int | None = typer.Option(
+        500,
+        "--max-events",
+        help="Maximum number of events to process (default: 500 for better date range coverage)",
+    ),
+    token_budget: int = typer.Option(
+        8000,
+        "--token-budget",
+        help="Token budget for AI context gathering",
+    ),
+    estimate_cost: bool = typer.Option(
+        False,
+        "--estimate-cost",
+        help="Show cost estimate without generating summary",
+    ),
+) -> None:
+    """Generate an AI-powered summary of GitHub activity."""
+    config = Config()
+
+    # Interactive mode: get username if not provided
+    if not user:
+        user = Prompt.ask("[cyan]Enter GitHub username to analyze")
+        if not user:
+            print("[red]Error: Username is required[/red]")
+            raise typer.Exit(1)
+
+    # Get token from CLI arg, env var, or stored config
+    if not token:
+        token = config.get_token()
+
+    # Interactive mode: prompt for token if none found
+    if not token:
+        print("[yellow]No GitHub token found.[/yellow]")
+        print(
+            "You can get a Personal Access Token from: https://github.com/settings/tokens"
+        )
+
+        if Confirm.ask("Would you like to enter a token now?"):
+            token = Prompt.ask(
+                "[cyan]Enter your GitHub Personal Access Token", password=True
+            )
+
+            if token and Confirm.ask("Save this token for future use?"):
+                config.set_token(token)
+
+        if not token:
+            print("[red]Error: GitHub token is required to continue[/red]")
+            raise typer.Exit(1)
+
+    print(f"[green]Generating AI-powered summary for user: {user}[/green]")
+    print(f"[blue]Time range: Last {days} days[/blue]")
+    print(f"[magenta]AI Model: {model}[/magenta]")
+    print(f"[cyan]Persona: {persona}[/cyan]")
+    if max_events:
+        print(f"[yellow]Event limit: {max_events} events maximum[/yellow]")
+    if output:
+        print(f"[green]Output will be saved to: {output}[/green]")
+
+    # Run the async AI analysis
+    try:
+        asyncio.run(
+            _generate_ai_summary(
+                user,
+                token,
+                model,
+                persona,
+                days,
+                output,
+                max_events,
+                token_budget,
+                estimate_cost,
+            )
+        )
+    except KeyboardInterrupt:
+        print("\n[red]Operation cancelled by user[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+async def _generate_ai_summary(
+    user: str,
+    token: str,
+    model: str,
+    persona: str,
+    days: int,
+    output: str | None,
+    max_events: int | None,
+    token_budget: int,
+    estimate_cost: bool,
+) -> None:
+    """Generate AI-powered summary of GitHub activity."""
+    # Calculate date range
+    end_date = datetime.now(UTC)
+    start_date = end_date - timedelta(days=days)
+
+    console.print(
+        Panel.fit(
+            f"[bold magenta]AI-Powered GitHub Activity Summary[/bold magenta]\n\n"
+            f"[white]User:[/white] [green]{user}[/green]\n"
+            f"[white]Period:[/white] [blue]{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}[/blue]\n"
+            f"[white]Duration:[/white] [yellow]{days} days[/yellow]\n"
+            f"[white]AI Model:[/white] [magenta]{model}[/magenta]\n"
+            f"[white]Persona:[/white] [cyan]{persona}[/cyan]",
+            title="🤖 AI Analysis Configuration",
+        )
+    )
+
+    # Initialize clients
+    github_client = GitHubClient(token=token)
+    coordinator = EventCoordinator(github_client)
+
+    try:
+        # Import here to avoid issues if AI dependencies aren't available
+        from git_summary.ai.client import LLMClient
+
+        # Initialize AI components
+        llm_client = LLMClient(model=model)
+        summarizer = ActivitySummarizer(
+            github_client=github_client,
+            llm_client=llm_client,
+            default_token_budget=token_budget,
+        )
+
+        # Fetch events with progress indication
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TextColumn("•"),
+            TextColumn("[cyan]{task.fields[events]}[/cyan] events"),
+            TimeElapsedColumn(),
+            console=console,
+            transient=False,
+        ) as progress:
+            # Create a task for fetching
+            fetch_task = progress.add_task(
+                f"Fetching events for [green]{user}[/green]...", events=0
+            )
+
+            def update_progress(current: int, _total: int | None) -> None:
+                progress.update(fetch_task, events=current)
+
+            # Fetch events by date range
+            events = await coordinator.fetch_events_by_date_range(
+                username=user,
+                start_date=start_date,
+                end_date=end_date,
+                max_pages=None,
+                max_events=max_events,
+                progress_callback=update_progress,
+            )
+
+            progress.update(
+                fetch_task, description=f"✓ Fetched events for [green]{user}[/green]"
+            )
+
+        console.print(
+            f"\n[green]✓[/green] Successfully fetched [cyan]{len(events)}[/cyan] events"
+        )
+
+        # Filter events to only include relevant types for AI analysis
+        relevant_event_types = {
+            "PushEvent",  # Commits
+            "PullRequestEvent",  # Pull requests
+            "PullRequestReviewEvent",  # PR reviews/comments
+            "ReleaseEvent",  # Releases
+            "IssueCommentEvent",  # Issue comments
+            "PullRequestReviewCommentEvent",  # PR review comments
+        }
+
+        original_count = len(events)
+        events = [event for event in events if event.type in relevant_event_types]
+        filtered_count = len(events)
+
+        console.print(
+            f"[blue]→[/blue] Filtered to [cyan]{filtered_count}[/cyan] relevant events "
+            f"(commits, PRs, reviews, releases, comments)"
+        )
+
+        if original_count > filtered_count:
+            console.print(
+                f"[dim]  Excluded {original_count - filtered_count} events "
+                f"(stars, forks, watches, etc.)[/dim]"
+            )
+
+        if not events:
+            console.print(
+                f"[yellow]No relevant development events found for {user} in the last {days} days[/yellow]"
+            )
+            console.print(
+                "[dim]Try increasing the time range with --days or check if the user has recent development activity[/dim]"
+            )
+            return
+
+        # Show cost estimate if requested
+        if estimate_cost:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+                transient=False,
+            ) as progress:
+                estimate_task = progress.add_task("Estimating AI processing cost...")
+
+                cost_info = await summarizer.estimate_cost(
+                    cast("list[GitHubEventLike]", events),
+                    persona_name=persona,
+                    token_budget=token_budget,
+                )
+
+                progress.update(estimate_task, description="✓ Cost estimation complete")
+
+            _display_cost_estimate(cost_info)
+            return
+
+        # Generate AI summary with progress indication
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=False,
+        ) as progress:
+            ai_task = progress.add_task("Generating AI-powered summary...")
+
+            # Generate the summary
+            summary_result = await summarizer.generate_summary(
+                cast("list[GitHubEventLike]", events),
+                persona_name=persona,
+                token_budget=token_budget,
+                include_context_details=False,  # Streamlined output for CLI
+            )
+
+            # Add user info to the result for proper markdown generation
+            summary_result["user"] = user
+
+            progress.update(ai_task, description="✓ AI summary generation complete")
+
+        console.print("[green]✓[/green] AI analysis complete!\n")
+
+        # Display the AI summary
+        _display_ai_summary(summary_result)
+
+        # Save to file if requested
+        if output:
+            _save_ai_summary_to_file(summary_result, output)
+            console.print(f"\n[green]✓[/green] Summary saved to [cyan]{output}[/cyan]")
+
+    except ImportError:
+        console.print(
+            "[red]✗[/red] AI dependencies not available. Please install with AI support."
+        )
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"\n[red]✗[/red] AI analysis failed: {e}")
+        raise
+    finally:
+        # Clean up client connections
+        await github_client.close()
+
+
+def _display_cost_estimate(cost_info: dict[str, Any]) -> None:
+    """Display cost estimation information."""
+    estimate = cost_info["cost_estimate"]
+
+    cost_content = (
+        f"[white]Estimated Cost:[/white] [green]${estimate.get('total_cost', 0):.4f}[/green]\n"
+        f"[white]Input Tokens:[/white] [cyan]{estimate.get('input_tokens', 0):,}[/cyan]\n"
+        f"[white]Output Tokens:[/white] [cyan]{estimate.get('output_tokens', 0):,}[/cyan]\n"
+        f"[white]Context Tokens:[/white] [yellow]{cost_info['context_tokens']:,}[/yellow]\n"
+        f"[white]Total Events:[/white] [blue]{cost_info['total_events']}[/blue]\n"
+        f"[white]Model:[/white] [magenta]{cost_info['model']}[/magenta]"
+    )
+
+    console.print(Panel(cost_content, title="💰 Cost Estimate", border_style="yellow"))
+
+    # Event breakdown
+    breakdown = cost_info["event_breakdown"]
+    if any(breakdown.values()):
+        breakdown_table = Table(
+            title="📊 Event Breakdown", show_header=True, header_style="bold blue"
+        )
+        breakdown_table.add_column("Event Type", style="cyan")
+        breakdown_table.add_column("Count", justify="right", style="green")
+
+        for event_type, count in breakdown.items():
+            if count > 0:
+                breakdown_table.add_row(
+                    event_type.replace("_", " ").title(), str(count)
+                )
+
+        console.print(breakdown_table)
+
+
+def _display_ai_summary(summary_result: dict[str, Any]) -> None:
+    """Display the AI-generated summary."""
+    # Main summary panel
+    summary_content = summary_result["summary"]
+
+    console.print(
+        Panel(
+            summary_content,
+            title=f"🤖 AI Summary ({summary_result['persona_used']})",
+            border_style="magenta",
+            padding=(1, 2),
+        )
+    )
+
+    # Metadata panel
+    metadata = summary_result["metadata"]
+    metadata_content = (
+        f"[white]Events Processed:[/white] [cyan]{metadata['total_events']}[/cyan]\n"
+        f"[white]Tokens Used:[/white] [yellow]{metadata['tokens_used']}[/yellow]\n"
+        f"[white]Active Repositories:[/white] [green]{len(metadata['repositories'])}[/green]\n"
+        f"[white]Model Used:[/white] [magenta]{summary_result['model_used']}[/magenta]"
+    )
+
+    # Add line changes metrics if available
+    if "line_changes" in metadata:
+        line_metrics = metadata["line_changes"]
+        metadata_content += (
+            f"\n[white]Lines Added:[/white] [green]+{line_metrics['lines_added']}[/green]\n"
+            f"[white]Lines Deleted:[/white] [red]-{line_metrics['lines_deleted']}[/red]\n"
+            f"[white]Net Lines:[/white] [cyan]{line_metrics['net_lines']:+d}[/cyan]\n"
+            f"[white]Files Changed:[/white] [blue]{line_metrics['files_changed']}[/blue]"
+        )
+
+    if metadata["repositories"]:
+        repos_text = ", ".join(metadata["repositories"][:3])
+        if len(metadata["repositories"]) > 3:
+            repos_text += f" and {len(metadata['repositories']) - 3} more"
+        metadata_content += f"\n[white]Repositories:[/white] [blue]{repos_text}[/blue]"
+
+    console.print(
+        Panel(metadata_content, title="📊 Analysis Metadata", border_style="blue")
+    )
+
+
+def _save_ai_summary_to_file(summary_result: dict[str, Any], output_path: str) -> None:
+    """Save AI summary to file in appropriate format."""
+    output_file = Path(output_path)
+
+    if output_file.suffix.lower() == ".json":
+        # Save as JSON
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(summary_result, f, indent=2, default=str)
+    else:
+        # Save as Markdown (default)
+        if not output_file.suffix:
+            output_file = output_file.with_suffix(".md")
+
+        metadata = summary_result["metadata"]
+
+        # Format date range properly
+        date_range = metadata.get("date_range")
+        if date_range and isinstance(date_range, tuple) and len(date_range) == 2:
+            start_date, end_date = date_range
+            if hasattr(start_date, "strftime") and hasattr(end_date, "strftime"):
+                formatted_period = f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
+            else:
+                formatted_period = str(date_range)
+        else:
+            formatted_period = metadata.get("date_range", "Unknown")
+
+        # Build metadata section
+        metadata_lines = [
+            f"- **Events Processed:** {metadata['total_events']}",
+            f"- **Tokens Used:** {metadata['tokens_used']}",
+            f"- **Active Repositories:** {len(metadata['repositories'])}",
+            f"- **Repositories:** {', '.join(metadata['repositories'])}",
+        ]
+
+        # Add line changes if available
+        if "line_changes" in metadata:
+            line_metrics = metadata["line_changes"]
+            metadata_lines.extend(
+                [
+                    f"- **Lines Added:** +{line_metrics['lines_added']}",
+                    f"- **Lines Deleted:** -{line_metrics['lines_deleted']}",
+                    f"- **Net Lines:** {line_metrics['net_lines']:+d}",
+                    f"- **Files Changed:** {line_metrics['files_changed']}",
+                ]
+            )
+
+        metadata_section = "\n".join(metadata_lines)
+
+        markdown_content = f"""# GitHub Activity Summary
+
+**User:** {summary_result.get('user', 'Unknown')}
+**Period:** {formatted_period}
+**AI Model:** {summary_result['model_used']}
+**Persona:** {summary_result['persona_used']}
+
+## AI Analysis
+
+{summary_result['summary']}
+
+## Analysis Metadata
+
+{metadata_section}
+
+---
+*Generated by git-summary AI-powered analysis*
+"""
+
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(markdown_content)
 
 
 async def _analyze_user_activity(
@@ -498,17 +941,29 @@ def auth_status() -> None:
     table.add_column("Value", style="green")
 
     table.add_row("Config File", info["config_file"])
-    table.add_row("Token Stored", "✓ Yes" if info["has_token"] else "✗ No")
+    table.add_row("GitHub Token", "✓ Yes" if info["has_token"] else "✗ No")
 
     if info["config_exists"]:
         table.add_row("File Permissions", info["config_file_permissions"] or "unknown")
+
+    # Add AI API key status
+    ai_keys = info["ai_api_keys"]
+    for provider, has_key in ai_keys.items():
+        status = "✓ Yes" if has_key else "✗ No"
+        table.add_row(f"{provider.title()} API Key", status)
 
     print(table)
 
     if not info["has_token"]:
         print()
         print(
-            "[yellow]No token found. Run [bold]git-summary auth[/bold] to set up authentication.[/yellow]"
+            "[yellow]No GitHub token found. Run [bold]git-summary auth[/bold] to set up authentication.[/yellow]"
+        )
+
+    if not any(ai_keys.values()):
+        print()
+        print(
+            "[yellow]No AI API keys found. Run [bold]git-summary ai-auth <provider>[/bold] to set up AI API keys.[/yellow]"
         )
 
 
@@ -526,6 +981,327 @@ def auth_remove() -> None:
         print("[green]✓[/green] Token removed successfully")
     else:
         print("Token removal cancelled")
+
+
+@app.command("ai-auth")
+def ai_auth(
+    provider: str = typer.Argument(
+        ..., help="AI provider (openai, anthropic, google, groq)"
+    ),
+) -> None:
+    """Manage AI API keys for different providers."""
+    config = Config()
+
+    if provider.lower() not in ["openai", "anthropic", "google", "groq"]:
+        print(
+            f"[red]Error: Unknown provider '{provider}'. Use: openai, anthropic, google, or groq[/red]"
+        )
+        raise typer.Exit(1)
+
+    provider = provider.lower()
+
+    print(f"[bold cyan]AI API Key Setup - {provider.title()}[/bold cyan]")
+    print()
+
+    current_key = config.get_ai_api_key(provider)
+    if current_key:
+        print(f"[green]✓[/green] You already have a {provider} API key stored")
+
+        if not Confirm.ask("Would you like to replace it with a new key?"):
+            return
+
+    # Provider-specific instructions
+    instructions = {
+        "openai": "You can get an API key from: [link]https://platform.openai.com/api-keys[/link]",
+        "anthropic": "You can get an API key from: [link]https://console.anthropic.com/[/link]",
+        "google": "You can get an API key from: [link]https://console.cloud.google.com/[/link]",
+        "groq": "You can get an API key from: [link]https://console.groq.com/keys[/link]",
+    }
+
+    print(instructions[provider])
+    print()
+
+    api_key = Prompt.ask(f"[cyan]Enter your {provider.title()} API key", password=True)
+
+    if not api_key:
+        print("[red]No API key provided[/red]")
+        return
+
+    config.set_ai_api_key(provider, api_key)
+    print(f"[green]✓[/green] {provider.title()} API key setup complete!")
+
+
+@app.command("ai-auth-status")
+def ai_auth_status() -> None:
+    """Show current AI API key status."""
+    config = Config()
+    ai_keys = config.list_ai_api_keys()
+
+    table = Table(title="AI API Key Status")
+    table.add_column("Provider", style="cyan")
+    table.add_column("Status", style="green")
+
+    for provider, has_key in ai_keys.items():
+        status = "✓ Configured" if has_key else "✗ Not configured"
+        table.add_row(provider.title(), status)
+
+    print(table)
+
+    if not any(ai_keys.values()):
+        print()
+        print(
+            "[yellow]No AI API keys configured. Run [bold]git-summary ai-auth <provider>[/bold] to set up API keys.[/yellow]"
+        )
+
+
+@app.command("ai-auth-remove")
+def ai_auth_remove(
+    provider: str = typer.Argument(
+        ..., help="AI provider (openai, anthropic, google, groq)"
+    ),
+) -> None:
+    """Remove stored AI API key for a provider."""
+    config = Config()
+
+    if provider.lower() not in ["openai", "anthropic", "google", "groq"]:
+        print(
+            f"[red]Error: Unknown provider '{provider}'. Use: openai, anthropic, google, or groq[/red]"
+        )
+        raise typer.Exit(1)
+
+    provider = provider.lower()
+
+    if not config.get_ai_api_key(provider):
+        print(f"[yellow]No {provider} API key is currently stored[/yellow]")
+        return
+
+    if Confirm.ask(
+        f"[red]Are you sure you want to remove the {provider} API key?[/red]"
+    ):
+        config.remove_ai_api_key(provider)
+    else:
+        print("API key removal cancelled")
+
+
+@app.command("personas")
+def list_personas(
+    show_sources: bool = typer.Option(
+        False, "--sources", "-s", help="Show persona sources (built-in, package, user)"
+    ),
+) -> None:
+    """List all available AI personas."""
+    try:
+        manager = PersonaManager()
+        personas_by_type = manager.list_personas_by_type()
+
+        console.print("\n[bold]Available AI Personas:[/bold]\n")
+
+        if show_sources:
+            # Show detailed breakdown by source
+            if personas_by_type["built_in"]:
+                console.print("[bold cyan]Built-in Personas:[/bold cyan]")
+                for persona in personas_by_type["built_in"]:
+                    console.print(f"  • {persona.name}: {persona.description}")
+                console.print()
+
+            if personas_by_type["package_yaml"]:
+                console.print("[bold green]Package YAML Personas:[/bold green]")
+                for persona in personas_by_type["package_yaml"]:
+                    console.print(f"  • {persona.name}: {persona.description}")
+                console.print()
+
+            if personas_by_type["user_yaml"]:
+                console.print("[bold magenta]Your Custom Personas:[/bold magenta]")
+                for persona in personas_by_type["user_yaml"]:
+                    console.print(f"  • {persona.name}: {persona.description}")
+                    console.print(f"    [dim]📁 {persona.yaml_path}[/dim]")
+                console.print()
+        else:
+            # Standard table view
+            table = Table(show_header=True, header_style="bold blue")
+            table.add_column("Name", style="cyan")
+            table.add_column("Source", style="yellow")
+            table.add_column("Description", style="white")
+
+            # Add built-in personas
+            for persona in personas_by_type["built_in"]:
+                table.add_row(persona.name, "Built-in", persona.description)
+
+            # Add package YAML personas
+            for persona in personas_by_type["package_yaml"]:
+                table.add_row(persona.name, "Package", persona.description)
+
+            # Add user YAML personas
+            for persona in personas_by_type["user_yaml"]:
+                table.add_row(persona.name, "Custom", persona.description)
+
+            console.print(table)
+
+        # Show usage hint
+        console.print(
+            "[dim]💡 Use personas with: [yellow]git-summary ai-summary --persona <name>[/yellow][/dim]"
+        )
+
+        # Show total count and breakdown
+        total_personas = len(personas_by_type["built_in"]) + len(
+            personas_by_type["yaml"]
+        )
+        user_count = len(personas_by_type["user_yaml"])
+
+        console.print(f"[dim]📊 Total: {total_personas} personas available[/dim]")
+        if user_count > 0:
+            console.print(
+                f"[dim]👤 Custom personas: {user_count} in ~/.git-summary/personas/[/dim]"
+            )
+
+    except Exception as e:
+        console.print(f"[red]❌ Error listing personas: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("create-persona")
+def create_persona_template(
+    name: str = typer.Argument(..., help="Name for the new persona"),
+    output: str | None = typer.Option(None, "--output", "-o", help="Output file path"),
+    template_type: str = typer.Option(
+        "basic", "--type", "-t", help="Template type: basic, technical"
+    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing file"),
+) -> None:
+    """Create a new YAML persona template."""
+    try:
+        manager = PersonaManager()
+
+        # Handle output path
+        output_path = Path(output) if output else None
+
+        # Check if file exists and handle force flag
+        if output_path and output_path.exists() and not force:
+            console.print(f"[red]❌ File already exists: {output_path}[/red]")
+            console.print("[yellow]💡 Use --force to overwrite existing files[/yellow]")
+            raise typer.Exit(1)
+
+        # Remove existing file if force is used
+        if force and output_path and output_path.exists():
+            output_path.unlink()
+            console.print(f"[yellow]🗑️  Removed existing file: {output_path}[/yellow]")
+
+        # Validate template type
+        if template_type not in ["basic", "technical"]:
+            console.print(f"[red]❌ Invalid template type: {template_type}[/red]")
+            console.print("[yellow]💡 Available types: basic, technical[/yellow]")
+            raise typer.Exit(1)
+
+        created_path = manager.create_persona_template(name, output_path, template_type)
+
+        console.print(
+            f"[green]✅ Created persona template: [cyan]{created_path}[/cyan][/green]"
+        )
+        console.print("[yellow]📝 Edit the file to customize the persona[/yellow]")
+        console.print(
+            f"[dim]💡 Then use it with: [yellow]git-summary ai-summary --persona '{name.lower()}'[/yellow][/dim]"
+        )
+
+        # Show template info
+        template_info = {
+            "basic": "General-purpose persona with flexible analysis sections",
+            "technical": "Engineering-focused persona with technical depth",
+        }
+        console.print(
+            f"[dim]📋 Template type: {template_type} - {template_info[template_type]}[/dim]"
+        )
+
+    except ValueError as e:
+        console.print(f"[red]❌ {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]❌ Failed to create persona template: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("persona-info")
+def persona_info(
+    name: str = typer.Argument(..., help="Name of the persona to inspect"),
+) -> None:
+    """Show detailed information about a persona."""
+    try:
+        manager = PersonaManager()
+        info = manager.get_persona_info(name)
+
+        console.print(
+            f"\n[bold cyan]📋 Persona Information: {info['name']}[/bold cyan]\n"
+        )
+
+        # Basic info table
+        basic_table = Table(show_header=False, box=None)
+        basic_table.add_column("Property", style="yellow")
+        basic_table.add_column("Value", style="white")
+
+        basic_table.add_row("Name", info["name"])
+        basic_table.add_row("Type", info["type"].title())
+        basic_table.add_row("Description", info["description"])
+
+        # Add YAML-specific information
+        if info["type"] == "yaml":
+            basic_table.add_row("File Path", info["yaml_path"])
+            basic_table.add_row("Version", info["version"])
+            basic_table.add_row("Author", info["author"])
+            basic_table.add_row("Sections", str(info["sections"]))
+            basic_table.add_row("Max Words", str(info["max_words"]))
+            basic_table.add_row("Tone", info["tone"].title())
+            basic_table.add_row("Audience", info["audience"].title())
+
+        console.print(basic_table)
+
+        # Usage example
+        persona_name_for_cli = info["name"].lower().replace(" ", "_")
+        console.print(
+            f"\n[dim]💡 Usage: [yellow]git-summary ai-summary --persona '{persona_name_for_cli}' username[/yellow][/dim]"
+        )
+
+    except ValueError as e:
+        console.print(f"[red]❌ Persona not found: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]❌ Error getting persona info: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("reload-personas")
+def reload_personas() -> None:
+    """Reload YAML personas from disk (useful for development)."""
+    try:
+        manager = PersonaManager()
+
+        console.print("[yellow]🔄 Reloading YAML personas...[/yellow]")
+
+        # Count before reload
+        before_count = len(manager.list_personas_by_type()["yaml"])
+
+        manager.reload_yaml_personas()
+
+        # Count after reload
+        after_count = len(manager.list_personas_by_type()["yaml"])
+
+        console.print(f"[green]✅ Reloaded {after_count} YAML personas[/green]")
+
+        if after_count != before_count:
+            if after_count > before_count:
+                console.print(
+                    f"[cyan]📈 Found {after_count - before_count} new personas[/cyan]"
+                )
+            else:
+                console.print(
+                    f"[yellow]📉 {before_count - after_count} personas were removed or failed to load[/yellow]"
+                )
+
+        console.print(
+            "[dim]💡 Run [yellow]git-summary personas[/yellow] to see all available personas[/dim]"
+        )
+
+    except Exception as e:
+        console.print(f"[red]❌ Error reloading personas: {e}[/red]")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

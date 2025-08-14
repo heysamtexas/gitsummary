@@ -68,6 +68,10 @@ class TokenBudget:
                 f"Cannot consume {tokens} tokens, only {self.reserved_tokens} reserved"
             )
 
+    def allocate(self, tokens: int) -> None:
+        """Directly allocate tokens to used tokens."""
+        self.used_tokens += tokens
+
     def consume(self, tokens: int) -> bool:
         """Directly consume tokens if available."""
         if self.can_allocate(tokens):
@@ -351,15 +355,22 @@ class RichContext:
 class ContextGatheringEngine:
     """Engine for gathering rich context from GitHub events."""
 
-    def __init__(self, github_client: GitHubClient, default_budget: int = 8000):
+    def __init__(
+        self,
+        github_client: GitHubClient,
+        default_budget: int = 8000,
+        fetch_commit_stats: bool = True,
+    ):
         """Initialize the context gathering engine.
 
         Args:
             github_client: GitHub API client for fetching additional data
             default_budget: Default token budget for context gathering
+            fetch_commit_stats: Whether to fetch detailed commit statistics (additions/deletions)
         """
         self.github_client = github_client
         self.default_budget = default_budget
+        self.fetch_commit_stats = fetch_commit_stats
 
     async def gather_context(
         self, events: list[GitHubEventLike], budget: TokenBudget | None = None
@@ -443,24 +454,87 @@ class ContextGatheringEngine:
     ) -> None:
         """Process push events to extract commit information."""
         for event in events:
-            # For BaseGitHubEvent, we'll work with the data we have access to
-            # In a real implementation, you'd use the EventFactory to get the correct typed event
+            if not hasattr(event, "payload") or not event.payload:
+                continue
 
-            # For testing purposes, we'll simulate extracting commit data
-            # This would normally come from the specific event type's payload
-            if hasattr(event, "payload") and event.payload:
-                commits = event.payload.get("commits", [])
-                for commit_data in commits:
-                    # Extract basic commit info from payload
-                    commit_details = {
-                        "sha": commit_data.get("sha", ""),
-                        "message": commit_data.get("message", ""),
-                        "author": commit_data.get("author", {}),
-                        "url": commit_data.get("url", ""),
-                    }
+            # Extract repository information
+            repo_name = event.repo.name if event.repo else None
+            if not repo_name or "/" not in repo_name:
+                continue
 
-                    # For budget efficiency, we'll use payload data primarily
-                    context.add_commit(event, commit_details)
+            owner, repo = repo_name.split("/", 1)
+
+            # Handle typed payload objects (e.g., PushEventPayload)
+            commits = getattr(event.payload, "commits", [])
+            for commit_data in commits:
+                # Extract basic commit info from payload
+                commit_sha = getattr(
+                    commit_data,
+                    "sha",
+                    commit_data.get("sha", "") if hasattr(commit_data, "get") else "",
+                )
+                commit_message = getattr(
+                    commit_data,
+                    "message",
+                    commit_data.get("message", "")
+                    if hasattr(commit_data, "get")
+                    else "",
+                )
+                commit_author = getattr(
+                    commit_data,
+                    "author",
+                    commit_data.get("author", {})
+                    if hasattr(commit_data, "get")
+                    else {},
+                )
+                commit_url = getattr(
+                    commit_data,
+                    "url",
+                    commit_data.get("url", "") if hasattr(commit_data, "get") else "",
+                )
+
+                commit_details = {
+                    "sha": commit_sha,
+                    "message": commit_message,
+                    "author": commit_author,
+                    "url": commit_url,
+                    "stats": {"additions": 0, "deletions": 0},  # Default values
+                }
+
+                # Fetch detailed commit stats if enabled and we have a SHA
+                if self.fetch_commit_stats and commit_sha and len(commit_sha) >= 7:
+                    try:
+                        # Check if we have budget for this API call (approximately 10 tokens per commit detail)
+                        if budget.can_allocate(10):
+                            detailed_commit = (
+                                await self.github_client.get_commit_details(
+                                    owner, repo, commit_sha
+                                )
+                            )
+                            commit_details["stats"] = detailed_commit.get(
+                                "stats", {"additions": 0, "deletions": 0}
+                            )
+
+                            # Also get files changed count
+                            files = detailed_commit.get("files", [])
+                            commit_details["files"] = files
+
+                            budget.allocate(10)  # Account for the API call cost
+
+                            logger.debug(
+                                f"Fetched stats for commit {commit_sha[:8]}: +{commit_details['stats'].get('additions', 0)} -{commit_details['stats'].get('deletions', 0)}"
+                            )
+                        else:
+                            logger.debug(
+                                f"Skipping commit stats for {commit_sha[:8]} - budget exhausted"
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to fetch commit details for {commit_sha[:8]}: {e}"
+                        )
+                        # Continue with basic commit info without stats
+
+                context.add_commit(event, commit_details)
 
     async def _process_pr_events(
         self, events: list[GitHubEventLike], context: RichContext, budget: TokenBudget
@@ -470,7 +544,13 @@ class ContextGatheringEngine:
             if not hasattr(event, "payload") or not event.payload:
                 continue
 
-            pr_data = event.payload.get("pull_request", {})
+            pr_data = getattr(
+                event.payload,
+                "pull_request",
+                event.payload.get("pull_request", {})
+                if hasattr(event.payload, "get")
+                else {},
+            )
             if pr_data:
                 context.add_pull_request(event, pr_data)
 
@@ -482,9 +562,36 @@ class ContextGatheringEngine:
             if not hasattr(event, "payload") or not event.payload:
                 continue
 
-            issue_data = event.payload.get("issue", {})
+            issue_data = getattr(
+                event.payload,
+                "issue",
+                event.payload.get("issue", {}) if hasattr(event.payload, "get") else {},
+            )
             if issue_data:
-                context.add_issue(event, issue_data)
+                # Convert typed Issue object to dict format expected by add_issue
+                if hasattr(issue_data, "number"):  # It's a typed Issue object
+                    # Convert Actor object to dict format
+                    user_obj = getattr(issue_data, "user", None)
+                    user_dict = {}
+                    if user_obj and hasattr(user_obj, "login"):
+                        user_dict = {
+                            "login": getattr(user_obj, "login", "unknown"),
+                            "id": getattr(user_obj, "id", 0),
+                        }
+
+                    issue_dict = {
+                        "number": getattr(issue_data, "number", 0),
+                        "title": getattr(issue_data, "title", ""),
+                        "state": getattr(issue_data, "state", "unknown"),
+                        "user": user_dict,
+                        "labels": getattr(issue_data, "labels", []),
+                        "comments": getattr(issue_data, "comments", 0),
+                        "assignees": getattr(issue_data, "assignees", []),
+                    }
+                    context.add_issue(event, issue_dict)
+                else:
+                    # It's already a dict
+                    context.add_issue(event, issue_data)
 
     async def _process_release_events(
         self, events: list[GitHubEventLike], context: RichContext, budget: TokenBudget
@@ -494,7 +601,13 @@ class ContextGatheringEngine:
             if not hasattr(event, "payload") or not event.payload:
                 continue
 
-            release_data = event.payload.get("release", {})
+            release_data = getattr(
+                event.payload,
+                "release",
+                event.payload.get("release", {})
+                if hasattr(event.payload, "get")
+                else {},
+            )
             if release_data:
                 context.add_release(event, release_data)
 
@@ -506,8 +619,20 @@ class ContextGatheringEngine:
             if not hasattr(event, "payload") or not event.payload:
                 continue
 
-            review_data = event.payload.get("review", {})
-            pr_data = event.payload.get("pull_request", {})
+            review_data = getattr(
+                event.payload,
+                "review",
+                event.payload.get("review", {})
+                if hasattr(event.payload, "get")
+                else {},
+            )
+            pr_data = getattr(
+                event.payload,
+                "pull_request",
+                event.payload.get("pull_request", {})
+                if hasattr(event.payload, "get")
+                else {},
+            )
 
             if review_data and pr_data:
                 context.reviews.append(

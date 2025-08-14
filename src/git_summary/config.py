@@ -79,6 +79,82 @@ class Config:
         except (json.JSONDecodeError, OSError):
             return {}
 
+    def get_ai_api_key(self, provider: str) -> str | None:
+        """Get stored AI API key for a specific provider.
+
+        Args:
+            provider: AI provider name (openai, anthropic, google, groq)
+
+        Returns:
+            API key if stored, None otherwise
+        """
+        config_data = self._load_config()
+        ai_keys = config_data.get("ai_api_keys", {})
+        return ai_keys.get(provider)  # type: ignore[no-any-return]
+
+    def set_ai_api_key(self, provider: str, api_key: str) -> None:
+        """Store AI API key securely.
+
+        Args:
+            provider: AI provider name (openai, anthropic, google, groq)
+            api_key: API key to store
+        """
+        config_data = self._load_config()
+        if "ai_api_keys" not in config_data:
+            config_data["ai_api_keys"] = {}
+
+        config_data["ai_api_keys"][provider] = api_key
+
+        with self.config_file.open("w") as f:
+            json.dump(config_data, f, indent=2)
+
+        # Set restrictive permissions on the config file
+        self.config_file.chmod(0o600)
+        print(
+            f"[green]✓[/green] {provider.title()} API key stored securely in {self.config_file}"
+        )
+
+    def remove_ai_api_key(self, provider: str) -> None:
+        """Remove stored AI API key for a specific provider.
+
+        Args:
+            provider: AI provider name (openai, anthropic, google, groq)
+        """
+        config_data = self._load_config()
+        ai_keys = config_data.get("ai_api_keys", {})
+
+        if provider in ai_keys:
+            del ai_keys[provider]
+
+            # Clean up empty ai_api_keys section
+            if not ai_keys:
+                config_data.pop("ai_api_keys", None)
+
+            if config_data:
+                with self.config_file.open("w") as f:
+                    json.dump(config_data, f, indent=2)
+            else:
+                # Remove empty config file
+                self.config_file.unlink(missing_ok=True)
+
+            print(
+                f"[green]✓[/green] {provider.title()} API key removed from local storage"
+            )
+        else:
+            print(f"[yellow]No {provider} API key found to remove[/yellow]")
+
+    def list_ai_api_keys(self) -> dict[str, bool]:
+        """List which AI API keys are configured.
+
+        Returns:
+            Dictionary mapping provider names to whether they have keys stored
+        """
+        config_data = self._load_config()
+        ai_keys = config_data.get("ai_api_keys", {})
+
+        providers = ["openai", "anthropic", "google", "groq"]
+        return {provider: provider in ai_keys for provider in providers}
+
     def get_config_info(self) -> dict[str, Any]:
         """Get information about current configuration.
 
@@ -87,11 +163,13 @@ class Config:
         """
         has_token = self.get_token() is not None
         config_exists = self.config_file.exists()
+        ai_keys = self.list_ai_api_keys()
 
         return {
             "config_file": str(self.config_file),
             "config_exists": config_exists,
             "has_token": has_token,
+            "ai_api_keys": ai_keys,
             "config_dir_permissions": oct(self.config_dir.stat().st_mode)[-3:]
             if self.config_dir.exists()
             else None,

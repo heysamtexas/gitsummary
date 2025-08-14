@@ -30,6 +30,7 @@ dependencies = [
     "typer>=0.12.0",
     "python-dotenv>=1.0.0",
     "litellm>=1.75.5.post1",
+    "pyyaml>=6.0.0",
 ]
 
 [project.optional-dependencies]
@@ -148,4 +149,9 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.3.0",
 ]

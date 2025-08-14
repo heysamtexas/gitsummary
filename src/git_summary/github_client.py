@@ -514,6 +514,32 @@ class GitHubClient:
             data = response.json()
             yield [EventFactory.create_event(event) for event in data]
 
+    async def get_commit_details(
+        self, owner: str, repo: str, sha: str
+    ) -> dict[str, Any]:
+        """Fetch detailed commit information including stats.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            sha: Commit SHA
+
+        Returns:
+            Detailed commit information with stats
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails
+        """
+        await self._check_rate_limit()
+
+        response = await self._make_request_with_retry(
+            "GET",
+            f"{self.base_url}/repos/{owner}/{repo}/commits/{sha}",
+            headers=self.headers,
+        )
+        self._update_rate_limit_info(response)
+        return response.json()  # type: ignore[no-any-return]
+
     async def validate_token(self) -> dict[str, Any]:
         """Validate the GitHub token and return user information.
 

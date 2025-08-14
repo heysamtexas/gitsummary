@@ -73,6 +73,54 @@ git-summary summary username --output results.json
 git-summary summary
 ```
 
+### 🤖 AI-Powered Analysis
+
+Generate intelligent, narrative summaries of GitHub activity with different AI personas:
+
+```bash
+# Technical analysis for engineers
+git-summary ai-summary username --persona "Tech Analyst"
+
+# Business-focused insights for stakeholders
+git-summary ai-summary username --persona "Product Manager"
+
+# Engaging first-person narratives
+git-summary ai-summary username --persona "Ghost Writer"
+
+# Team collaboration insights
+git-summary ai-summary username --persona "Team Lead"
+
+# Data-driven metrics analysis
+git-summary ai-summary username --persona "Data Analyst"
+```
+
+#### AI Command Options
+
+```bash
+git-summary ai-summary [USERNAME] [OPTIONS]
+
+Options:
+  --persona, -p TEXT       AI persona for analysis style (default: "Tech Analyst")
+  --model, -m TEXT         AI model to use (default: "claude-3-7-sonnet-latest")
+  --days, -d INTEGER       Number of days to analyze (default: 7)
+  --output, -o TEXT        Output file (.md or .json format)
+  --max-events INTEGER     Limit number of events processed
+  --token-budget INTEGER   AI token budget for analysis (default: 8000)
+  --estimate-cost          Show cost estimate before processing
+```
+
+#### Available Personas
+
+| Persona | Focus | Best For |
+|---------|-------|----------|
+| **Tech Analyst** | Technical depth, code quality | Engineering teams, code reviews |
+| **Product Manager** | Business impact, user value | Stakeholder updates, roadmaps |
+| **Ghost Writer** | Personal narratives, storytelling | Portfolios, blog posts, retrospectives |
+| **Team Lead** | Collaboration, team health | Team management, performance reviews |
+| **Data Analyst** | Metrics, trends, quantitative insights | KPI tracking, trend analysis |
+
+👉 **[Complete AI Personas Guide](docs/personas.md)** - Learn how to create custom personas
+
 ### Authentication Commands
 
 ```bash
@@ -84,6 +132,24 @@ git-summary auth-status
 
 # Remove stored token
 git-summary auth-remove
+
+# Set up AI API keys for analysis features
+git-summary ai-auth anthropic    # For Claude models
+git-summary ai-auth openai       # For GPT models
+git-summary ai-auth groq         # For Groq models
+
+# Check AI API key status
+git-summary ai-auth-status
+
+# Remove AI API key
+git-summary ai-auth-remove anthropic
+
+# Persona management
+git-summary personas              # List available personas
+git-summary personas --sources    # Show persona sources
+git-summary create-persona "Custom Name" --type basic
+git-summary reload-personas       # Reload custom personas
+git-summary persona-info "Persona Name"
 ```
 
 ### All Available Options
@@ -209,7 +275,28 @@ echo "GITHUB_TOKEN=your_token_here" > .env
 
 - **Config directory**: `~/.git-summary/`
 - **Config file**: `~/.git-summary/config.json`
-- **Permissions**: 700 (directory), 600 (file)
+- **Custom personas**: `~/.git-summary/personas/*.yaml`
+- **Permissions**: 700 (directory), 600 (files)
+
+### Custom Personas
+
+Create your own AI analysis styles by adding YAML files to `~/.git-summary/personas/`:
+
+```bash
+# Create a custom persona template
+git-summary create-persona "Executive Briefer" --type basic
+
+# Edit the YAML file to customize behavior
+nano ~/.git-summary/personas/executive_briefer.yaml
+
+# Reload to activate your changes
+git-summary reload-personas
+
+# Use your custom persona
+git-summary ai-summary username --persona "Executive Briefer"
+```
+
+See the **[Complete Personas Guide](docs/personas.md)** for detailed configuration options.
 
 ## 🚨 Troubleshooting
 
@@ -228,6 +315,18 @@ echo "GITHUB_TOKEN=your_token_here" > .env
 **"Permission denied" errors**
 - Check that your token has the required scopes (`public_repo` or `repo`)
 - Regenerate token if it's expired
+
+**"No AI API key found" (for ai-summary command)**
+- Run `git-summary ai-auth anthropic` to set up Claude API key
+- Or `git-summary ai-auth openai` for OpenAI GPT models
+- Or `git-summary ai-auth groq` for Groq models
+- Check status with `git-summary ai-auth-status`
+
+**"Persona not found" errors**
+- Run `git-summary personas` to see available personas
+- Check spelling and use exact persona names
+- For custom personas, ensure YAML files are in `~/.git-summary/personas/`
+- Run `git-summary reload-personas` after adding/editing custom personas
 
 ### Getting Help
 
