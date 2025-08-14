@@ -2,7 +2,7 @@
 
 import logging
 from collections import defaultdict
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from git_summary.models import (
@@ -101,7 +101,7 @@ class EventProcessor:
         end_date: datetime | None = None,
     ) -> GitHubActivityReport:
         """Create an empty report for when there are no events."""
-        now = datetime.now()
+        now = datetime.now(UTC)
         if start_date is None:
             start_date = now
         if end_date is None:

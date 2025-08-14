@@ -4,7 +4,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from git_summary.github_client import GitHubClient
@@ -944,8 +944,8 @@ class UserEventStrategy(FetchStrategy):
         coordinator = EventCoordinatorLegacy(self.client)
         events = await coordinator.fetch_events_by_date_range(
             username=username,
-            start_date=since or datetime.min,
-            end_date=datetime.now(),
+            start_date=since or datetime.min.replace(tzinfo=UTC),
+            end_date=datetime.now(UTC),
             max_pages=max_pages,
             max_events=max_events,
             progress_callback=progress_callback,
