@@ -33,9 +33,10 @@ class MultiSourceDiscovery:
             github_client: GitHub API client for making requests
         """
         self.github_client = github_client
+        # Use more conservative rate limiting for search API
         self.rate_limiter = SimpleRateLimiter(
-            requests_per_minute=120
-        )  # Conservative rate limiting for search API
+            requests_per_minute=60  # 30 searches/min + buffer for rest API calls
+        )
 
         # Configuration (can be overridden)
         self.max_owned_repos = self.DEFAULT_MAX_OWNED_REPOS
@@ -75,10 +76,17 @@ class MultiSourceDiscovery:
         if progress_callback:
             progress_callback("Discovering repositories from multiple sources", 0, 100)
 
-        # Source 1: Recently updated owned repositories
+        # Source 1: Recently updated owned repositories (critical path)
         if progress_callback:
             progress_callback("Fetching owned repositories", 10, 100)
-        owned_repos = await self._fetch_owned_repositories(username, cutoff_date)
+        try:
+            owned_repos = await self._fetch_owned_repositories(username, cutoff_date)
+        except Exception as e:
+            logger.error(f"Failed to fetch owned repositories: {e}")
+            logger.warning(
+                "Owned repository discovery failed - results may be incomplete"
+            )
+            owned_repos = {}
 
         # Source 2: Development events from user stream (filtered)
         if progress_callback:
@@ -345,7 +353,7 @@ class MultiSourceDiscovery:
         event_repos: dict[str, dict[str, Any]],
         commit_repos: dict[str, dict[str, Any]],
     ) -> list[str]:
-        """Merge repository sources with priority scoring.
+        """Merge repository sources with corrected priority scoring.
 
         Args:
             owned_repos: Repositories from ownership
@@ -355,51 +363,69 @@ class MultiSourceDiscovery:
         Returns:
             List of repository names ordered by priority
         """
-        # Combine all sources with score merging
-        all_repos = {}
+        # Get all unique repository names
+        all_repo_names = set()
+        all_repo_names.update(owned_repos.keys())
+        all_repo_names.update(event_repos.keys())
+        all_repo_names.update(commit_repos.keys())
 
-        # Add owned repositories (highest priority)
-        for repo_name, data in owned_repos.items():
+        # Calculate priority scores correctly
+        all_repos = {}
+        owned_repo_names = set(owned_repos.keys())
+
+        for repo_name in all_repo_names:
+            # Start with source contributions
+            score = 0.0
+            source_count = 0
+            sources = []
+            data = {}
+
+            # Add weighted contributions from each source
+            if repo_name in owned_repos:
+                score += 3.0  # Base weight for owned repos
+                source_count += 1
+                sources.append("owned")
+                data["owned"] = owned_repos[repo_name]
+
+            if repo_name in event_repos:
+                score += event_repos[repo_name]["score"]
+                source_count += 1
+                sources.append("events")
+                data["events"] = event_repos[repo_name]
+
+            if repo_name in commit_repos:
+                score += commit_repos[repo_name]["score"]
+                source_count += 1
+                sources.append("commits")
+                data["commits"] = commit_repos[repo_name]
+
+            # Multi-source bonus (after base scoring)
+            if source_count > 1:
+                score *= 1.5
+
+            # Owned repo priority boost (final multiplier)
+            if repo_name in owned_repo_names:
+                score *= 2.0
+
             all_repos[repo_name] = {
-                "total_score": data["score"] * 2,  # Boost owned repos
-                "sources": ["owned"],
-                "data": {"owned": data},
+                "total_score": score,
+                "sources": sources,
+                "source_count": source_count,
+                "data": data,
+                "is_owned": repo_name in owned_repo_names,
             }
 
-        # Add event repositories
-        for repo_name, data in event_repos.items():
-            if repo_name in all_repos:
-                all_repos[repo_name]["total_score"] += data["score"]
-                all_repos[repo_name]["sources"].append("events")
-                all_repos[repo_name]["data"]["events"] = data
-            else:
-                all_repos[repo_name] = {
-                    "total_score": data["score"],
-                    "sources": ["events"],
-                    "data": {"events": data},
-                }
-
-        # Add commit repositories
-        for repo_name, data in commit_repos.items():
-            if repo_name in all_repos:
-                all_repos[repo_name]["total_score"] += data["score"]
-                all_repos[repo_name]["sources"].append("commits")
-                all_repos[repo_name]["data"]["commits"] = data
-            else:
-                all_repos[repo_name] = {
-                    "total_score": data["score"],
-                    "sources": ["commits"],
-                    "data": {"commits": data},
-                }
-
-        # Sort by total score and limit
+        # Sort by source count first (multi-source preferred), then by score
         sorted_repos = sorted(
             all_repos.items(),
-            key=lambda x: (len(x[1]["sources"]), x[1]["total_score"]),
+            key=lambda x: (x[1]["source_count"], x[1]["total_score"]),
             reverse=True,
         )
 
         final_repos = [repo for repo, _ in sorted_repos[: self.max_total_repos]]
+
+        # Validation and logging
+        self._validate_discovery_results(final_repos, all_repos)
 
         logger.info(
             f"Merged sources: {len(owned_repos)} owned + {len(event_repos)} events + "
@@ -407,6 +433,58 @@ class MultiSourceDiscovery:
         )
 
         return final_repos
+
+    def _validate_discovery_results(
+        self, final_repos: list[str], all_repos: dict[str, dict[str, Any]]
+    ) -> None:
+        """Validate discovery results and log warnings for potential issues.
+
+        Args:
+            final_repos: List of selected repository names
+            all_repos: Dictionary of all discovered repositories with metadata
+        """
+        if len(final_repos) < 5:
+            logger.warning(
+                f"Low repository count: {len(final_repos)}. "
+                "Consider adjusting discovery parameters for better coverage."
+            )
+
+        owned_count = sum(1 for repo in final_repos if all_repos[repo]["is_owned"])
+        if owned_count == 0:
+            logger.warning(
+                "No owned repositories found in final results. "
+                "Results may be incomplete for this user."
+            )
+
+        # Check source diversity
+        multi_source_count = sum(
+            1 for repo in final_repos if all_repos[repo]["source_count"] > 1
+        )
+        if multi_source_count == 0:
+            logger.info("No multi-source repositories found - sources are disjoint")
+
+        # Log debug breakdown if enabled
+        if logger.isEnabledFor(logging.DEBUG):
+            self._log_discovery_breakdown(final_repos, all_repos)
+
+    def _log_discovery_breakdown(
+        self, final_repos: list[str], all_repos: dict[str, dict[str, Any]]
+    ) -> None:
+        """Log detailed breakdown of discovery results for debugging.
+
+        Args:
+            final_repos: List of selected repository names
+            all_repos: Dictionary of all discovered repositories with metadata
+        """
+        logger.debug("=== Repository Discovery Breakdown ===")
+        for i, repo_name in enumerate(final_repos[:10]):  # Top 10 only
+            repo_data = all_repos[repo_name]
+            logger.debug(
+                f"{i + 1:2d}. {repo_name} "
+                f"(score: {repo_data['total_score']:.1f}, "
+                f"sources: {repo_data['sources']}, "
+                f"owned: {repo_data['is_owned']})"
+            )
 
     async def _fetch_detailed_repository_events(
         self,

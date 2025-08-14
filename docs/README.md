@@ -14,7 +14,8 @@ Welcome to the git-summary documentation! This directory contains comprehensive 
 
 ### For Users
 - **Getting Started**: See the main [README](../README.md) for installation and basic usage
-- **AI Analysis**: Use `git-summary ai-summary username --persona "Ghost Writer"` for engaging summaries
+- **AI Analysis**: Use `git-summary ai-summary username --persona "Ghost Writer"` for engaging summaries with comprehensive engagement tracking
+- **Repository Filtering**: Focus on specific projects with `git-summary ai-summary username --repo owner/project`
 - **Custom Personas**: Create your own analysis styles with `git-summary create-persona "Your Name"`
 
 ### For Developers
@@ -32,22 +33,34 @@ Welcome to the git-summary documentation! This directory contains comprehensive 
 
 ### Daily Standups
 ```bash
-git-summary ai-summary yourname --persona "Team Lead" --days 1
+git-summary ai-summary yourname --persona "Team Lead" --days 1 --repo myorg/current-project
 ```
 
 ### Sprint Retrospectives
 ```bash
-git-summary ai-summary team-repo --persona "Tech Analyst" --days 14
+git-summary ai-summary yourname --persona "Tech Analyst" --days 14 --repo myorg/frontend --repo myorg/backend
 ```
 
 ### Stakeholder Updates
 ```bash
-git-summary ai-summary project --persona "Product Manager" --days 30
+git-summary ai-summary yourname --persona "Product Manager" --days 30 --repo company/main-product
 ```
 
 ### Portfolio Showcase
 ```bash
 git-summary ai-summary yourname --persona "Ghost Writer" --days 90
+```
+
+### Project-Specific Analysis
+```bash
+# Focus on a single repository
+git-summary ai-summary yourname --repo company/main-app
+
+# Compare activity across multiple repositories
+git-summary ai-summary yourname --repo myorg/api --repo myorg/web --repo myorg/mobile
+
+# Combine with time range for project sprints
+git-summary ai-summary yourname --days 21 --repo team/sprint-project --persona "Data Analyst"
 ```
 
 ## 🆘 Need Help?

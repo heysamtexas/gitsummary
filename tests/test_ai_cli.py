@@ -22,6 +22,8 @@ class TestAISummaryCommand:
         assert "--persona" in result.stdout
         assert "--token-budget" in result.stdout
         assert "--estimate-cost" in result.stdout
+        assert "--repo" in result.stdout
+        assert "Filter events to specific repositories" in result.stdout
 
     @patch("git_summary.cli._generate_ai_summary")
     def test_ai_summary_with_username_and_token(self, mock_generate):
@@ -167,6 +169,84 @@ class TestAISummaryCommand:
 
             assert result.exit_code == 1
             assert "Error: Test error" in result.stdout
+
+    @patch("git_summary.cli._generate_ai_summary")
+    def test_ai_summary_with_single_repo_filter(self, mock_generate):
+        """Test ai-summary command with single repository filter."""
+        mock_generate.return_value = None
+
+        result = runner.invoke(
+            app,
+            [
+                "ai-summary",
+                "testuser",
+                "--token",
+                "fake_token",
+                "--repo",
+                "owner/repo-name",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_generate.assert_called_once()
+
+        # Check that repo parameter is passed correctly
+        call_args = mock_generate.call_args[0]
+        assert call_args[9] == ["owner/repo-name"]  # repo parameter
+
+    @patch("git_summary.cli._generate_ai_summary")
+    def test_ai_summary_with_multiple_repo_filters(self, mock_generate):
+        """Test ai-summary command with multiple repository filters."""
+        mock_generate.return_value = None
+
+        result = runner.invoke(
+            app,
+            [
+                "ai-summary",
+                "testuser",
+                "--token",
+                "fake_token",
+                "--repo",
+                "owner/repo1",
+                "--repo",
+                "owner/repo2",
+                "--repo",
+                "another/project",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_generate.assert_called_once()
+
+        # Check that all repo parameters are passed correctly
+        call_args = mock_generate.call_args[0]
+        assert call_args[9] == [
+            "owner/repo1",
+            "owner/repo2",
+            "another/project",
+        ]  # repo parameter
+
+    @patch("git_summary.cli._generate_ai_summary")
+    def test_ai_summary_without_repo_filter(self, mock_generate):
+        """Test ai-summary command without repository filter."""
+        mock_generate.return_value = None
+
+        result = runner.invoke(
+            app,
+            [
+                "ai-summary",
+                "testuser",
+                "--token",
+                "fake_token",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_generate.assert_called_once()
+
+        # Check that repo parameter is None when not specified
+        call_args = mock_generate.call_args[0]
+        assert call_args[9] is None  # repo parameter
 
 
 class TestAISummaryHelpers:

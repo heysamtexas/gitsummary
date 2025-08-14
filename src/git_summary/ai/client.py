@@ -44,7 +44,7 @@ class LLMClient:
     def __init__(
         self,
         model: str = "anthropic/claude-3-7-sonnet-latest",
-        fallback_model: str = "groq/llama-3.1-70b-versatile",
+        fallback_model: str = "groq/llama-3.3-70b-versatile",
         max_tokens: int = 2000,
         temperature: float = 0.7,
         timeout: int = 30,
@@ -373,7 +373,7 @@ class LLMClient:
                 "context_window": "200K",
             },
             {
-                "name": "groq/llama-3.1-70b-versatile",
+                "name": "groq/llama-3.3-70b-versatile",
                 "provider": "Groq",
                 "description": "High-quality model with fast inference (fallback)",
                 "cost_tier": "Low",
@@ -427,6 +427,13 @@ class LLMClient:
                 "description": "Large context model for comprehensive analysis",
                 "cost_tier": "Medium",
                 "context_window": "2M",
+            },
+            {
+                "name": "groq/moonshotai/kimi-k2-instruct",
+                "provider": "Groq (Moonshot AI)",
+                "description": "Preview model for evaluation (may be discontinued)",
+                "cost_tier": "Low",
+                "context_window": "131K",
             },
             {
                 "name": "ollama/llama3.1",

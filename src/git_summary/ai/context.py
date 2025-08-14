@@ -181,22 +181,46 @@ class RichContext:
         if title := details.get("title", ""):
             self.issue_titles.append(title)
 
-    def add_release(self, event: GitHubEventLike, details: dict[str, Any]) -> None:
+    def add_release(
+        self, event: GitHubEventLike, details: dict[str, Any] | Any
+    ) -> None:
         """Add release information to context."""
+        # Handle both dictionary and Release model object
+        if hasattr(details, "get"):  # Dictionary-like object
+            tag_name = details.get("tag_name", "")
+            name = details.get("name", "")
+            author_login = details.get("author", {}).get("login", "unknown")
+            prerelease = details.get("prerelease", False)
+            draft = details.get("draft", False)
+            assets_count = len(details.get("assets", []))
+            body = details.get("body", "")
+        else:  # Release model object
+            tag_name = getattr(details, "tag_name", "")
+            name = getattr(details, "name", "")
+            author_login = (
+                getattr(getattr(details, "author", None), "login", "unknown")
+                if hasattr(details, "author")
+                else "unknown"
+            )
+            prerelease = getattr(details, "prerelease", False)
+            draft = getattr(details, "draft", False)
+            assets_count = 0  # Release model doesn't have assets in this format
+            body = getattr(details, "body", "")
+
         self.releases.append(
             {
-                "tag_name": details.get("tag_name", ""),
-                "name": details.get("name", ""),
+                "tag_name": tag_name,
+                "name": name,
                 "repository": event.repo.name if event.repo else "unknown",
                 "timestamp": parse_github_datetime(event.created_at),
-                "author": details.get("author", {}).get("login", "unknown"),
-                "prerelease": details.get("prerelease", False),
-                "draft": details.get("draft", False),
-                "assets_count": len(details.get("assets", [])),
+                "author": author_login,
+                "prerelease": prerelease,
+                "draft": draft,
+                "assets_count": assets_count,
             }
         )
 
-        if body := details.get("body", ""):
+        if body:
             self.release_notes.append(body)
 
     def estimate_token_usage(self) -> int:
@@ -601,13 +625,13 @@ class ContextGatheringEngine:
             if not hasattr(event, "payload") or not event.payload:
                 continue
 
-            release_data = getattr(
-                event.payload,
-                "release",
-                event.payload.get("release", {})
-                if hasattr(event.payload, "get")
-                else {},
-            )
+            # Get release data from the payload
+            if hasattr(event.payload, "release"):
+                release_data = event.payload.release
+            elif hasattr(event.payload, "get") and event.payload.get("release"):
+                release_data = event.payload.get("release")
+            else:
+                continue
             if release_data:
                 context.add_release(event, release_data)
 

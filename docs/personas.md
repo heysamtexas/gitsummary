@@ -1,6 +1,6 @@
 # AI Personas Guide
 
-Git-summary includes a powerful AI persona system that allows you to get different styles of analysis from the same GitHub activity data. Each persona has a unique voice, focus, and perspective on your development work.
+Git-summary includes a powerful AI persona system that analyzes comprehensive GitHub engagement data - including commits, pull requests, issues, reviews, comments, branch management, and documentation contributions. Each persona has a unique voice, focus, and perspective on your complete development workflow.
 
 ## Overview
 
@@ -16,6 +16,7 @@ AI personas transform dry GitHub activity into engaging, insightful narratives. 
 
 ```bash
 git-summary ai-summary username --persona "Tech Analyst"
+git-summary ai-summary username --persona "Tech Analyst" --repo myorg/backend-api
 ```
 
 ### Product Manager
@@ -26,6 +27,7 @@ git-summary ai-summary username --persona "Tech Analyst"
 
 ```bash
 git-summary ai-summary username --persona "Product Manager"
+git-summary ai-summary username --persona "Product Manager" --repo company/main-product
 ```
 
 ### Ghost Writer
@@ -56,7 +58,33 @@ git-summary ai-summary username --persona "Team Lead"
 
 ```bash
 git-summary ai-summary username --persona "Data Analyst"
+git-summary ai-summary username --persona "Data Analyst" --repo myorg/frontend --repo myorg/backend
 ```
+
+## Repository Filtering
+
+All personas work seamlessly with repository filtering to provide focused analysis on specific projects or repositories. This allows you to get persona-specific insights for particular areas of your work.
+
+### Common Patterns
+
+```bash
+# Focus on a single repository
+git-summary ai-summary username --persona "Tech Analyst" --repo company/core-service
+
+# Compare multiple related repositories
+git-summary ai-summary username --persona "Team Lead" --repo myorg/web --repo myorg/mobile
+
+# Sprint-focused analysis
+git-summary ai-summary username --days 14 --persona "Product Manager" --repo team/sprint-project
+
+# Portfolio analysis for specific projects
+git-summary ai-summary username --days 90 --persona "Ghost Writer" --repo personal/showcase-project
+```
+
+**Pro Tip:** Repository filtering is especially powerful when combined with personas:
+- **Tech Analyst + repo filtering** = Deep technical insights for specific codebases
+- **Product Manager + repo filtering** = Business impact analysis for particular products
+- **Data Analyst + multiple repos** = Cross-project performance comparisons
 
 ## Custom Personas
 

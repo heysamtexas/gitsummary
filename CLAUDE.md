@@ -20,8 +20,9 @@ This is a modern Python 3.12+ project using UV package manager, following best p
 ### Data Processing Layer
 - Time-based activity summarization (daily, weekly, custom ranges)
 - Event categorization and filtering by type
-- Repository-based activity grouping
+- Repository-based activity grouping and filtering
 - Comprehensive event extraction to ensure no user activity is missed
+- Repository filtering support for focused analysis on specific projects
 
 ### Output Generation
 - Structured JSON export with standardized schema
@@ -86,6 +87,11 @@ uv run git-summary summary username --days 30 --output results.json
 # Using environment variable for token
 GITHUB_TOKEN=your_token uv run git-summary summary username
 
+# AI-powered analysis with repository filtering
+uv run git-summary ai-summary username --repo owner/repo-name
+uv run git-summary ai-summary username --repo myorg/frontend --repo myorg/backend
+uv run git-summary ai-summary username --days 30 --repo myproject/api --persona "Tech Analyst"
+
 # Development commands
 uv run ruff format
 uv run ruff check
@@ -102,10 +108,12 @@ uv build
 
 3. **API Coverage**: Ensure comprehensive coverage of GitHub event types:
    - Commits and commit comments
-   - Issues (created, commented, assigned, closed)
+   - Issues (created, commented, assigned, closed, labeled)
    - Pull requests (created, reviewed, merged, commented)
-   - Repository events (stars, forks, watches)
-   - Code reviews and project board activities
+   - Branch management (creation, deletion)
+   - Code reviews and PR feedback
+   - Documentation (wiki edits)
+   - Repository events (releases, significant activities only)
 
 4. **Output Flexibility**: Design the system to support multiple output formats and verbosity levels
 
@@ -131,6 +139,7 @@ uv build
 
 ### Available Commands
 - `git-summary summary [username]` - Main analysis command with full interactivity
+- `git-summary ai-summary [username]` - AI-powered analysis with repository filtering support
 - `git-summary auth` - Interactive token setup and management
 - `git-summary auth-status` - Show current authentication status with table
 - `git-summary auth-remove` - Remove stored token with confirmation

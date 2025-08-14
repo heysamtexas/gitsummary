@@ -286,7 +286,12 @@ class ConfigurablePersona(BasePersona):
             data_output += f"**Releases ({len(releases)} total):**\n"
             for i, release in enumerate(releases[:3]):
                 notes = release_notes[i] if i < len(release_notes) else "No notes"
-                data_output += f"- {release.get('tag_name', 'unknown')}: {notes[:100]}{'...' if len(notes) > 100 else ''}\n"
+                tag_name = (
+                    release.tag_name if hasattr(release, "tag_name") else "unknown"
+                )
+                data_output += (
+                    f"- {tag_name}: {notes[:100]}{'...' if len(notes) > 100 else ''}\n"
+                )
 
             if len(releases) > 3:
                 data_output += f"... and {len(releases) - 3} more releases\n"
@@ -457,7 +462,12 @@ Keep the analysis under 400 words, focusing on technical substance over verbosit
             instructions += f"**Releases ({len(releases)} total):**\n"
             for i, release in enumerate(releases[:3]):  # Show up to 3 releases
                 notes = release_notes[i] if i < len(release_notes) else "No notes"
-                instructions += f"- {release.get('tag_name', 'unknown')}: {notes[:100]}{'...' if len(notes) > 100 else ''}\n"
+                tag_name = (
+                    release.tag_name if hasattr(release, "tag_name") else "unknown"
+                )
+                instructions += (
+                    f"- {tag_name}: {notes[:100]}{'...' if len(notes) > 100 else ''}\n"
+                )
             if len(releases) > 3:
                 instructions += f"... and {len(releases) - 3} more releases\n"
 

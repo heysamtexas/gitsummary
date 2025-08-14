@@ -172,7 +172,9 @@ def summary(
         strategy_override = "multi_source"
     elif force_strategy:
         if force_strategy not in ["intelligence_guided", "multi_source"]:
-            print(f"[red]Error: Invalid strategy '{force_strategy}'. Must be 'intelligence_guided' or 'multi_source'[/red]")
+            print(
+                f"[red]Error: Invalid strategy '{force_strategy}'. Must be 'intelligence_guided' or 'multi_source'[/red]"
+            )
             raise typer.Exit(1)
         strategy_override = force_strategy
 
@@ -180,8 +182,14 @@ def summary(
     try:
         asyncio.run(
             _analyze_user_activity(
-                user, token, days, output, max_events, include_events,
-                strategy_override, max_repos
+                user,
+                token,
+                days,
+                output,
+                max_events,
+                include_events,
+                strategy_override,
+                max_repos,
             )
         )
     except KeyboardInterrupt:
@@ -691,7 +699,9 @@ async def _analyze_user_activity(
     try:
         if not await validate_github_token(token):
             console.print("[red]Error: Invalid or expired GitHub token[/red]")
-            console.print("[yellow]Please check your token and try again, or run 'git-summary auth' to set up a new token[/yellow]")
+            console.print(
+                "[yellow]Please check your token and try again, or run 'git-summary auth' to set up a new token[/yellow]"
+            )
             raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error validating token: {e}[/red]")
@@ -701,7 +711,9 @@ async def _analyze_user_activity(
     shutdown_event = asyncio.Event()
 
     def signal_handler(_signum: int, _frame: Any) -> None:
-        console.print("\n[yellow]Cancelling analysis... Please wait for cleanup.[/yellow]")
+        console.print(
+            "\n[yellow]Cancelling analysis... Please wait for cleanup.[/yellow]"
+        )
         shutdown_event.set()
 
     signal.signal(signal.SIGINT, signal_handler)
@@ -719,14 +731,25 @@ async def _analyze_user_activity(
                     return
 
                 await _perform_analysis(
-                    adaptive_discovery, processor, user, days, output,
-                    max_events, include_events, strategy_override, max_repos,
-                    shutdown_event, start_date, end_date
+                    adaptive_discovery,
+                    processor,
+                    user,
+                    days,
+                    output,
+                    max_events,
+                    include_events,
+                    strategy_override,
+                    max_repos,
+                    shutdown_event,
+                    start_date,
+                    end_date,
                 )
 
     except TimeoutError:
         console.print("[red]Analysis timed out after 5 minutes[/red]")
-        console.print("[yellow]Try reducing the analysis period with --days or limiting repositories with --max-repos[/yellow]")
+        console.print(
+            "[yellow]Try reducing the analysis period with --days or limiting repositories with --max-repos[/yellow]"
+        )
         raise typer.Exit(1)
     except KeyboardInterrupt:
         console.print("\n[yellow]Analysis cancelled by user[/yellow]")
@@ -784,9 +807,7 @@ async def _perform_analysis(
 
             # Perform the adaptive analysis
             user_activity = await adaptive_discovery.analyze_user(
-                username=user,
-                days=days,
-                force_strategy=strategy_override
+                username=user, days=days, force_strategy=strategy_override
             )
 
             # Validate analysis result
@@ -795,8 +816,12 @@ async def _perform_analysis(
                 raise typer.Exit(1)
 
             if not user_activity.events:
-                console.print(f"[yellow]No events found for user {user} in the last {days} days[/yellow]")
-                console.print("[dim]Try increasing the time range with --days or check if the user has recent activity[/dim]")
+                console.print(
+                    f"[yellow]No events found for user {user} in the last {days} days[/yellow]"
+                )
+                console.print(
+                    "[dim]Try increasing the time range with --days or check if the user has recent activity[/dim]"
+                )
                 return
 
             # Note: max_events and max_repos would be handled by the adaptive discovery
@@ -805,23 +830,33 @@ async def _perform_analysis(
             if max_events and len(user_activity.events) > max_events:
                 original_count = len(user_activity.events)
                 user_activity.events = user_activity.events[:max_events]
-                console.print(f"[yellow]→[/yellow] Limited to {max_events} events (from {original_count} total)")
+                console.print(
+                    f"[yellow]→[/yellow] Limited to {max_events} events (from {original_count} total)"
+                )
 
             # TODO: Future enhancement - pass max_repos to adaptive discovery system
             _ = max_repos  # Suppress unused argument warning
 
-            progress.update(profile_task, description=f"✓ Profiled [green]{user}[/green]", completed=True)
+            progress.update(
+                profile_task,
+                description=f"✓ Profiled [green]{user}[/green]",
+                completed=True,
+            )
 
             # Display strategy information with better error handling
             strategy_used = getattr(user_activity, "analysis_strategy", "unknown")
             if strategy_used == "unknown":
-                console.print("[yellow]Warning: Analysis strategy could not be determined[/yellow]")
+                console.print(
+                    "[yellow]Warning: Analysis strategy could not be determined[/yellow]"
+                )
             elif strategy_used == "fallback":
-                console.print("[yellow]Warning: Using basic fallback strategy due to API limitations[/yellow]")
+                console.print(
+                    "[yellow]Warning: Using basic fallback strategy due to API limitations[/yellow]"
+                )
             else:
                 strategy_display = {
                     "intelligence_guided": "[blue]Intelligence-Guided Analysis[/blue] (optimized path)",
-                    "multi_source": "[magenta]Comprehensive Multi-Source Discovery[/magenta] (complete coverage)"
+                    "multi_source": "[magenta]Comprehensive Multi-Source Discovery[/magenta] (complete coverage)",
                 }.get(strategy_used, f"[yellow]{strategy_used}[/yellow]")
                 console.print(f"\n[green]→[/green] Strategy: {strategy_display}")
 
@@ -830,9 +865,13 @@ async def _perform_analysis(
                 classification = user_activity.profile.classification
                 confidence = user_activity.profile.confidence_score
                 if classification == "heavy-automation":
-                    console.print(f"[yellow]→[/yellow] User classified as automation (confidence: {confidence:.1%})")
+                    console.print(
+                        f"[yellow]→[/yellow] User classified as automation (confidence: {confidence:.1%})"
+                    )
                 else:
-                    console.print(f"[cyan]→[/cyan] User classified as {classification} developer (confidence: {confidence:.1%})")
+                    console.print(
+                        f"[cyan]→[/cyan] User classified as {classification} developer (confidence: {confidence:.1%})"
+                    )
 
             events = user_activity.events
 
@@ -840,7 +879,7 @@ async def _perform_analysis(
                 analysis_task,
                 description=f"✓ Analyzed {len(user_activity.repositories)} repositories",
                 info=f"{len(events)} events",
-                completed=True
+                completed=True,
             )
 
         # Display comprehensive analysis results
@@ -850,12 +889,19 @@ async def _perform_analysis(
 
         # Show repository coverage details
         if user_activity.repositories:
-            console.print(f"[dim]  Repositories: {', '.join(user_activity.repositories[:5])}")
+            console.print(
+                f"[dim]  Repositories: {', '.join(user_activity.repositories[:5])}"
+            )
             if len(user_activity.repositories) > 5:
-                console.print(f"[dim]  ... and {len(user_activity.repositories) - 5} more repositories")
+                console.print(
+                    f"[dim]  ... and {len(user_activity.repositories) - 5} more repositories"
+                )
 
         # Show performance metrics if available
-        if hasattr(user_activity, "execution_time_ms") and user_activity.execution_time_ms:
+        if (
+            hasattr(user_activity, "execution_time_ms")
+            and user_activity.execution_time_ms
+        ):
             execution_time = user_activity.execution_time_ms / 1000
             console.print(f"[dim]  Analysis completed in {execution_time:.2f} seconds")
 
@@ -914,13 +960,19 @@ async def _perform_analysis(
         error_msg = str(e)
         if "rate limit" in error_msg.lower():
             console.print(f"[red]Rate limit exceeded: {error_msg}[/red]")
-            console.print("[yellow]Try again later or reduce the analysis scope with --days or --max-repos[/yellow]")
+            console.print(
+                "[yellow]Try again later or reduce the analysis scope with --days or --max-repos[/yellow]"
+            )
         elif "not found" in error_msg.lower() or "404" in error_msg:
             console.print(f"[red]User or repository not found: {error_msg}[/red]")
-            console.print("[yellow]Please check the username and ensure it exists on GitHub[/yellow]")
+            console.print(
+                "[yellow]Please check the username and ensure it exists on GitHub[/yellow]"
+            )
         elif "permission" in error_msg.lower() or "403" in error_msg:
             console.print(f"[red]Permission denied: {error_msg}[/red]")
-            console.print("[yellow]Please check your token permissions or try with a different token[/yellow]")
+            console.print(
+                "[yellow]Please check your token permissions or try with a different token[/yellow]"
+            )
         else:
             console.print(f"[red]Analysis failed: {error_msg}[/red]")
         raise

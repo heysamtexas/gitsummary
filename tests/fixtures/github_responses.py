@@ -4,10 +4,9 @@ Following Guilfoyle's guidance: test behavior, not perfect API simulation.
 Each fixture focuses on specific data patterns that affect our analysis logic.
 """
 
+import json
 from pathlib import Path
 from typing import Any
-
-import json
 
 FIXTURES_DIR = Path(__file__).parent / "github_responses"
 
@@ -17,8 +16,8 @@ def load_fixture(fixture_name: str) -> dict[str, Any]:
     fixture_path = FIXTURES_DIR / f"{fixture_name}.json"
     if not fixture_path.exists():
         raise FileNotFoundError(f"Fixture not found: {fixture_path}")
-    
-    with open(fixture_path, "r", encoding="utf-8") as f:
+
+    with open(fixture_path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -27,12 +26,12 @@ FIXTURES = {
     # User event patterns for automation detection
     "user_events": {
         "automation_bot": "automation_heavy_user_events.json",
-        "normal_developer": "normal_user_mixed_activity.json", 
+        "normal_developer": "normal_user_mixed_activity.json",
         "inactive_user": "empty_user_events.json",
         "high_frequency_user": "high_frequency_push_events.json",
         "single_repo_dominant": "single_repo_dominance.json",
     },
-    
+
     # Repository search results for discovery testing
     "repository_search": {
         "prolific_contributor": "many_repos_varied_activity.json",
@@ -40,21 +39,21 @@ FIXTURES = {
         "no_repositories": "empty_repository_search.json",
         "private_repos_only": "private_repositories_result.json",
     },
-    
+
     # Owned repositories for multi-source discovery
     "owned_repos": {
         "active_maintainer": "owned_repos_recently_updated.json",
         "inactive_maintainer": "owned_repos_stale.json",
         "no_owned_repos": "empty_owned_repos.json",
     },
-    
+
     # Commit search results
     "commit_search": {
         "frequent_committer": "commit_search_many_results.json",
         "occasional_contributor": "commit_search_few_results.json",
         "no_commits": "empty_commit_search.json",
     },
-    
+
     # Error responses
     "errors": {
         "rate_limited": "rate_limit_response.json",
@@ -84,7 +83,7 @@ def create_normal_user_events() -> list[dict[str, Any]]:
     """Create synthetic events for a normal developer."""
     event_types = ["PushEvent", "PullRequestEvent", "IssuesEvent", "CreateEvent"]
     repos = ["user/project1", "org/shared-project", "user/side-project"]
-    
+
     events = []
     for i in range(1, 21):  # 20 mixed events
         events.append({
@@ -94,7 +93,7 @@ def create_normal_user_events() -> list[dict[str, Any]]:
             "repo": {"name": repos[i % len(repos)].split("/")[1], "full_name": repos[i % len(repos)]},
             "actor": {"login": "normal-developer"},
         })
-    
+
     return events
 
 
@@ -109,7 +108,7 @@ def create_repository_discovery_results() -> dict[str, list[dict[str, Any]]]:
                 "language": "Python",
             },
             {
-                "full_name": "user/side-project", 
+                "full_name": "user/side-project",
                 "updated_at": "2024-01-10T10:00:00Z",
                 "private": True,
                 "language": "JavaScript",

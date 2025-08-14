@@ -75,7 +75,7 @@ git-summary summary
 
 ### 🤖 AI-Powered Analysis
 
-Generate intelligent, narrative summaries of GitHub activity with different AI personas:
+Generate intelligent, narrative summaries of GitHub activity with comprehensive engagement tracking. AI analysis includes commits, pull requests, issues, reviews, comments, branch management, and documentation contributions across all repositories or filtered to specific projects:
 
 ```bash
 # Technical analysis for engineers
@@ -92,6 +92,15 @@ git-summary ai-summary username --persona "Team Lead"
 
 # Data-driven metrics analysis
 git-summary ai-summary username --persona "Data Analyst"
+
+# Focus analysis on specific repositories
+git-summary ai-summary username --repo owner/repo-name
+
+# Analyze multiple repositories
+git-summary ai-summary username --repo myorg/frontend --repo myorg/backend
+
+# Combine with time range and persona
+git-summary ai-summary username --days 30 --repo myproject/api --persona "Tech Analyst"
 ```
 
 #### AI Command Options
@@ -104,6 +113,7 @@ Options:
   --model, -m TEXT         AI model to use (default: "claude-3-7-sonnet-latest")
   --days, -d INTEGER       Number of days to analyze (default: 7)
   --output, -o TEXT        Output file (.md or .json format)
+  --repo, -r TEXT          Filter events to specific repositories (can be used multiple times)
   --max-events INTEGER     Limit number of events processed
   --token-budget INTEGER   AI token budget for analysis (default: 8000)
   --estimate-cost          Show cost estimate before processing
@@ -351,22 +361,37 @@ The tool analyzes all GitHub event types:
 - **Collaboration**: Comments, reviews, mentions
 - **Project Management**: Project boards, milestones
 
+### AI Analysis Coverage
+
+The AI-powered analysis (`ai-summary`) focuses on high-value development activities:
+
+- **Code Development**: Commits, branches, releases
+- **Issue Management**: Issue creation, assignment, closing, labeling
+- **Pull Request Workflow**: PR creation, reviews, comments
+- **Documentation**: Wiki edits and updates
+- **Project Collaboration**: Issue discussions and PR feedback
+
+*Note: Low-effort activities like starring and forking repositories are excluded from AI analysis to focus on meaningful contributions.*
+
 ## 🎯 Use Cases
 
 ### Personal Productivity
 - Track your daily coding activity
 - Generate reports for standups or reviews
 - Monitor contribution patterns across projects
+- Focus analysis on specific repositories for project-specific insights
 
 ### Team Management
 - Analyze team member contributions
 - Track project activity and engagement
 - Generate activity reports for stakeholders
+- Compare activity across different repositories or projects
 
 ### Project Analytics
 - Monitor repository health and activity
 - Track contributor engagement over time
 - Analyze development velocity and patterns
+- Get focused insights by filtering to specific repositories
 
 ## 📜 License
 
