@@ -22,7 +22,6 @@ from git_summary.adaptive_discovery import AdaptiveRepositoryDiscovery
 from git_summary.ai.orchestrator import ActivitySummarizer
 from git_summary.ai.personas import PersonaManager
 from git_summary.config import Config
-from git_summary.fetchers import EventCoordinator
 from git_summary.github_client import GitHubClient
 from git_summary.processors import EventProcessor
 
@@ -353,163 +352,191 @@ async def _generate_ai_summary(
         )
     )
 
-    # Initialize clients
-    github_client = GitHubClient(token=token)
-    coordinator = EventCoordinator(github_client)
+    # Initialize clients using unified architecture
+    async with GitHubClient(token=token) as github_client:
+        adaptive_discovery = AdaptiveRepositoryDiscovery(github_client)
 
-    try:
-        # Import here to avoid issues if AI dependencies aren't available
-        from git_summary.ai.client import LLMClient
+        try:
+            # Import here to avoid issues if AI dependencies aren't available
+            from git_summary.ai.client import LLMClient
 
-        # Initialize AI components
-        llm_client = LLMClient(model=model)
-        summarizer = ActivitySummarizer(
-            github_client=github_client,
-            llm_client=llm_client,
-            default_token_budget=token_budget,
-        )
-
-        # Fetch events with progress indication
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            TextColumn("•"),
-            TextColumn("[cyan]{task.fields[events]}[/cyan] events"),
-            TimeElapsedColumn(),
-            console=console,
-            transient=False,
-        ) as progress:
-            # Create a task for fetching
-            fetch_task = progress.add_task(
-                f"Fetching events for [green]{user}[/green]...", events=0
+            # Initialize AI components
+            llm_client = LLMClient(model=model)
+            summarizer = ActivitySummarizer(
+                github_client=github_client,
+                llm_client=llm_client,
+                default_token_budget=token_budget,
             )
 
-            def update_progress(current: int, _total: int | None) -> None:
-                progress.update(fetch_task, events=current)
+            # Fetch events using adaptive system with progress indication
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                TextColumn("•"),
+                TextColumn("[cyan]{task.fields[events]}[/cyan] events"),
+                TimeElapsedColumn(),
+                console=console,
+                transient=False,
+            ) as progress:
+                # Create a task for fetching
+                fetch_task = progress.add_task(
+                    f"Fetching events for [green]{user}[/green]...", events=0
+                )
 
-            # Fetch events by date range with repository filtering
-            events = await coordinator.fetch_events_by_date_range(
-                username=user,
-                start_date=start_date,
-                end_date=end_date,
-                repo_filters=repo,
-                max_pages=None,
-                max_events=max_events,
-                progress_callback=update_progress,
-            )
+                def update_progress(current: int, _total: int | None) -> None:
+                    progress.update(fetch_task, events=current)
 
-            progress.update(
-                fetch_task, description=f"✓ Fetched events for [green]{user}[/green]"
-            )
+                # Use adaptive discovery for intelligent event fetching
+                user_activity = await adaptive_discovery.analyze_user(
+                    username=user,
+                    days=days,
+                    force_strategy=None,  # Let it auto-select optimal strategy
+                )
 
-        console.print(
-            f"\n[green]✓[/green] Successfully fetched [cyan]{len(events)}[/cyan] events"
-        )
+                events = user_activity.events
 
-        # Filter events to only include relevant types for AI analysis
-        relevant_event_types = {
-            "PushEvent",  # Commits
-            "PullRequestEvent",  # Pull requests
-            "PullRequestReviewEvent",  # PR reviews/comments
-            "ReleaseEvent",  # Releases
-            "IssueCommentEvent",  # Issue comments
-            "PullRequestReviewCommentEvent",  # PR review comments
-            "IssuesEvent",  # Issue creation, assignment, closing, labeling
-            "CreateEvent",  # Branch/tag creation
-            "DeleteEvent",  # Branch/tag deletion
-            "GollumEvent",  # Wiki edits
-        }
+                # Apply repository filtering if specified (client-side filtering)
+                if repo:
+                    original_count = len(events)
+                    repo_names = [r.lower() for r in repo]
+                    events = [
+                        event
+                        for event in events
+                        if event.repo
+                        and (
+                            event.repo.name.lower() in repo_names
+                            or (
+                                event.repo.full_name
+                                and event.repo.full_name.lower() in repo_names
+                            )
+                        )
+                    ]
+                    console.print(
+                        f"[blue]→[/blue] Repository filter applied: {original_count} → {len(events)} events"
+                    )
 
-        original_count = len(events)
-        events = [event for event in events if event.type in relevant_event_types]
-        filtered_count = len(events)
+                # Apply max_events limit if specified
+                if max_events and len(events) > max_events:
+                    original_count = len(events)
+                    events = events[:max_events]
+                    console.print(
+                        f"[blue]→[/blue] Limited to {max_events} events (from {original_count} total)"
+                    )
 
-        console.print(
-            f"[blue]→[/blue] Filtered to [cyan]{filtered_count}[/cyan] relevant events "
-            f"(commits, PRs, reviews, releases, comments, issues, branches)"
-        )
+                progress.update(
+                    fetch_task,
+                    description=f"✓ Fetched events for [green]{user}[/green]",
+                )
 
-        if original_count > filtered_count:
             console.print(
-                f"[dim]  Excluded {original_count - filtered_count} events "
-                f"(stars, forks, watches, etc.)[/dim]"
+                f"\n[green]✓[/green] Successfully fetched [cyan]{len(events)}[/cyan] events"
             )
 
-        # Repository filtering is now handled by the coordinator strategy
+            # Filter events to only include relevant types for AI analysis
+            relevant_event_types = {
+                "PushEvent",  # Commits
+                "PullRequestEvent",  # Pull requests
+                "PullRequestReviewEvent",  # PR reviews/comments
+                "ReleaseEvent",  # Releases
+                "IssueCommentEvent",  # Issue comments
+                "PullRequestReviewCommentEvent",  # PR review comments
+                "IssuesEvent",  # Issue creation, assignment, closing, labeling
+                "CreateEvent",  # Branch/tag creation
+                "DeleteEvent",  # Branch/tag deletion
+                "GollumEvent",  # Wiki edits
+            }
 
-        if not events:
+            original_count = len(events)
+            events = [event for event in events if event.type in relevant_event_types]
+            filtered_count = len(events)
+
             console.print(
-                f"[yellow]No relevant development events found for {user} in the last {days} days[/yellow]"
+                f"[blue]→[/blue] Filtered to [cyan]{filtered_count}[/cyan] relevant events "
+                f"(commits, PRs, reviews, releases, comments, issues, branches)"
             )
-            console.print(
-                "[dim]Try increasing the time range with --days or check if the user has recent development activity[/dim]"
-            )
-            return
 
-        # Show cost estimate if requested
-        if estimate_cost:
+            if original_count > filtered_count:
+                console.print(
+                    f"[dim]  Excluded {original_count - filtered_count} events "
+                    f"(stars, forks, watches, etc.)[/dim]"
+                )
+
+            if not events:
+                console.print(
+                    f"[yellow]No relevant development events found for {user} in the last {days} days[/yellow]"
+                )
+                console.print(
+                    "[dim]Try increasing the time range with --days or check if the user has recent development activity[/dim]"
+                )
+                return
+
+            # Show cost estimate if requested
+            if estimate_cost:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    console=console,
+                    transient=False,
+                ) as progress:
+                    estimate_task = progress.add_task(
+                        "Estimating AI processing cost..."
+                    )
+
+                    cost_info = await summarizer.estimate_cost(
+                        cast("list[GitHubEventLike]", events),
+                        persona_name=persona,
+                        token_budget=token_budget,
+                    )
+
+                    progress.update(
+                        estimate_task, description="✓ Cost estimation complete"
+                    )
+
+                _display_cost_estimate(cost_info)
+                return
+
+            # Generate AI summary with progress indication
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
                 console=console,
                 transient=False,
             ) as progress:
-                estimate_task = progress.add_task("Estimating AI processing cost...")
+                ai_task = progress.add_task("Generating AI-powered summary...")
 
-                cost_info = await summarizer.estimate_cost(
+                # Generate the summary
+                summary_result = await summarizer.generate_summary(
                     cast("list[GitHubEventLike]", events),
                     persona_name=persona,
                     token_budget=token_budget,
+                    include_context_details=False,  # Streamlined output for CLI
                 )
 
-                progress.update(estimate_task, description="✓ Cost estimation complete")
+                # Add user info to the result for proper markdown generation
+                summary_result["user"] = user
 
-            _display_cost_estimate(cost_info)
-            return
+                progress.update(ai_task, description="✓ AI summary generation complete")
 
-        # Generate AI summary with progress indication
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=False,
-        ) as progress:
-            ai_task = progress.add_task("Generating AI-powered summary...")
+            console.print("[green]✓[/green] AI analysis complete!\n")
 
-            # Generate the summary
-            summary_result = await summarizer.generate_summary(
-                cast("list[GitHubEventLike]", events),
-                persona_name=persona,
-                token_budget=token_budget,
-                include_context_details=False,  # Streamlined output for CLI
+            # Display the AI summary
+            _display_ai_summary(summary_result)
+
+            # Save to file if requested
+            if output:
+                _save_ai_summary_to_file(summary_result, output)
+                console.print(
+                    f"\n[green]✓[/green] Summary saved to [cyan]{output}[/cyan]"
+                )
+
+        except ImportError:
+            console.print(
+                "[red]✗[/red] AI dependencies not available. Please install with AI support."
             )
-
-            # Add user info to the result for proper markdown generation
-            summary_result["user"] = user
-
-            progress.update(ai_task, description="✓ AI summary generation complete")
-
-        console.print("[green]✓[/green] AI analysis complete!\n")
-
-        # Display the AI summary
-        _display_ai_summary(summary_result)
-
-        # Save to file if requested
-        if output:
-            _save_ai_summary_to_file(summary_result, output)
-            console.print(f"\n[green]✓[/green] Summary saved to [cyan]{output}[/cyan]")
-
-    except ImportError:
-        console.print(
-            "[red]✗[/red] AI dependencies not available. Please install with AI support."
-        )
-        raise typer.Exit(1)
-    except Exception as e:
-        console.print(f"\n[red]✗[/red] AI analysis failed: {e}")
-        raise
-    finally:
-        # Clean up client connections
-        await github_client.close()
+            raise typer.Exit(1)
+        except Exception as e:
+            console.print(f"\n[red]✗[/red] AI analysis failed: {e}")
+            raise
 
 
 def _display_cost_estimate(cost_info: dict[str, Any]) -> None:
