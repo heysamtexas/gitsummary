@@ -115,6 +115,13 @@ uv run ruff check
 uv run ruff check --fix
 uv run pytest
 uv build
+
+# Code quality analysis
+uv run radon cc src/                    # Cyclomatic complexity analysis
+uv run radon mi src/                    # Maintainability index (A/B/C rankings)
+uv run radon raw src/                   # Raw metrics (LOC, comments, etc.)
+uv run vulture src/                     # Dead code detection
+uv run vulture src/ --min-confidence 90  # High-confidence dead code only
 ```
 
 ### Development Guidelines
@@ -135,6 +142,12 @@ uv build
 4. **Output Flexibility**: Design the system to support multiple output formats and verbosity levels
 
 5. **Error Handling**: Implement robust error handling for API failures, network issues, and data validation
+
+6. **Code Quality Standards**: Before finalizing any significant code changes, run quality analysis tools to maintain codebase health:
+   - Use `radon cc` to identify functions with high cyclomatic complexity (aim for Rank A/B, avoid C+ complexity)
+   - Check maintainability with `radon mi` (target A-rank maintainability index)
+   - Clean up dead code identified by `vulture` (focus on high-confidence findings)
+   - Track quality trends over time - complexity should not increase without justification
 
 ## CLI Features
 
