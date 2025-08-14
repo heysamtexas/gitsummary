@@ -1,0 +1,1 @@
+# Test fixtures for GitHub API responses and synthetic data
