@@ -55,7 +55,7 @@ class GitHubClient:
         self.token = token
         self.base_url = base_url
         self.headers = {
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"token {token}",
             "Accept": "application/vnd.github.v3+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }

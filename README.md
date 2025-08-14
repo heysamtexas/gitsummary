@@ -202,16 +202,16 @@ Options:
   --days, -d INTEGER           Number of days to analyze (default: 7)
   --output, -o TEXT            Output file (JSON format)
   --max-events INTEGER         Maximum number of events to process
-  
+
   # NEW: Adaptive Analysis Options
   --comprehensive              Force multi-source comprehensive analysis
   --max-repos INTEGER          Maximum repositories to analyze (adaptive default)
   --force-strategy STRATEGY    Force specific strategy: intelligence_guided | multi_source
-  
+
   # Coming Soon
   --include-events TEXT        [MVP] Event types to include
   --exclude-repos TEXT         [MVP] Repositories to exclude
-  
+
   --help                       Show help message
 ```
 
@@ -419,10 +419,10 @@ curl "https://api.github.com/users/torvalds/events"
 
 git-summary automatically detects user patterns and selects optimal analysis strategies:
 
-#### 1. **Automation Detection** 
+#### 1. **Automation Detection**
 Analyzes activity patterns to classify users:
 - **Issue Ratio**: >70% issue events indicates automation
-- **Repository Dominance**: >80% activity in single repo suggests bots  
+- **Repository Dominance**: >80% activity in single repo suggests bots
 - **High Frequency**: >5 events/day indicates automated systems
 - **Timing Patterns**: Regular intervals suggest automated processes
 
@@ -434,7 +434,7 @@ git-summary summary username  # Auto-selects this for normal users
 ```
 - 📊 Discovers repositories through initial 300 events
 - 🎯 Scores repositories by development activity weight
-- ⚡ Deep-dives into top 15 most important repositories  
+- ⚡ Deep-dives into top 15 most important repositories
 - 🚀 Fast: ~15-30 API calls, ~30-60 seconds
 - 📈 Coverage: Captures 85-95% of meaningful activity
 
@@ -445,7 +445,7 @@ git-summary summary username --comprehensive  # Forces this mode
 - 🔍 Combines owned repositories + user events + commit search
 - 📚 Cross-references multiple GitHub API endpoints
 - 🏆 Priority-based repository ranking with multi-source scoring
-- 📊 Comprehensive: ~60-120 API calls, ~2-5 minutes  
+- 📊 Comprehensive: ~60-120 API calls, ~2-5 minutes
 - 🎯 Coverage: 95-99% of all activity, complete history
 
 #### 3. **Smart Optimizations**
@@ -466,21 +466,21 @@ git-summary summary username --comprehensive  # Forces this mode
 
 ### Real-World Examples
 
-**Before (Traditional)**: 
+**Before (Traditional)**:
 ```
 User: kubernetes-maintainer
 Events Found: 300 (last 18 hours)
-Repositories: 3 
+Repositories: 3
 Coverage: ~5% of monthly activity
 ```
 
 **After (Adaptive)**:
 ```
-User: kubernetes-maintainer  
+User: kubernetes-maintainer
 Strategy: Multi-Source Discovery
 Events Found: 2,847 (full 30 days)
 Repositories: 24
-Coverage: ~97% of monthly activity  
+Coverage: ~97% of monthly activity
 API Calls: 87
 Time: 3m 42s
 ```

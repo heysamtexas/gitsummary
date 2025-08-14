@@ -7,6 +7,7 @@ for both intelligence-guided and multi-source discovery approaches.
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -122,7 +123,11 @@ class AdaptiveRepositoryDiscovery:
         return self._multi_source
 
     async def analyze_user(
-        self, username: str, days: int = 30, force_strategy: str | None = None
+        self,
+        username: str,
+        days: int = 30,
+        force_strategy: str | None = None,
+        progress_callback: Callable[[str], None] | None = None,
     ) -> UserActivity:
         """Analyze a GitHub user with adaptive strategy selection.
 
@@ -131,6 +136,7 @@ class AdaptiveRepositoryDiscovery:
             days: Number of days of activity to analyze
             force_strategy: Force specific strategy ('intelligence_guided' or 'multi_source')
                           Mainly for testing and debugging purposes
+            progress_callback: Optional callback for progress updates (str message)
 
         Returns:
             UserActivity object containing analysis results and metadata
@@ -164,6 +170,30 @@ class AdaptiveRepositoryDiscovery:
 
             # Step 2: Select optimal strategy with validation (Guilfoyle's fix)
             strategy = self._select_strategy(profile, force_strategy)
+
+            # Notify user of strategy decision
+            if progress_callback:
+                if strategy == "multi_source":
+                    if force_strategy:
+                        progress_callback(
+                            "🔍 Using comprehensive multi-source analysis (forced)"
+                        )
+                    elif profile.is_heavily_automated:
+                        progress_callback(
+                            "🤖 Detected automation patterns → switching to comprehensive analysis"
+                        )
+                    else:
+                        progress_callback(
+                            "🔍 Switching to comprehensive multi-source analysis"
+                        )
+                else:
+                    if force_strategy:
+                        progress_callback(
+                            "⚡ Using fast intelligence-guided analysis (forced)"
+                        )
+                    else:
+                        progress_callback("⚡ Using fast intelligence-guided analysis")
+
             logger.info(
                 f"Selected strategy '{strategy}' for user '{username}'",
                 extra={

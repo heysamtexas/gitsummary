@@ -26,7 +26,7 @@ This is a modern Python 3.12+ project using UV package manager, following best p
 - Rate limiting compliance with intelligent REST vs Search API balancing
 - **NEW**: Multi-source data correlation across owned repos, user events, and commit search
 
-### Data Processing Layer  
+### Data Processing Layer
 - Time-based activity summarization (daily, weekly, custom ranges)
 - Event categorization and filtering by type
 - Repository-based activity grouping and filtering

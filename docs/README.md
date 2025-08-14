@@ -147,21 +147,21 @@ def classify_user(username: str, days: int = 7) -> UserProfile:
     ISSUE_RATIO_THRESHOLD = 0.70        # 70%+ issue events = automation
     SINGLE_REPO_DOMINANCE = 0.80        # 80%+ single repo = bot
     HIGH_FREQUENCY_THRESHOLD = 5.0      # >5 events/day = automation
-    
+
     # Multi-factor scoring for confidence
     confidence = weighted_average([
         issue_ratio_score,
-        repo_dominance_score, 
+        repo_dominance_score,
         frequency_score,
         timing_pattern_score
     ])
-    
+
     return UserProfile(is_automation=score > 0.7, confidence=confidence)
 ```
 
 **Detection Logic**:
 - **Issue Ratio Analysis**: Bots heavily use issue events for notifications
-- **Repository Dominance**: Automation typically focuses on single repositories  
+- **Repository Dominance**: Automation typically focuses on single repositories
 - **High Frequency Detection**: >5 events/day suggests automated activity
 - **Timing Pattern Analysis**: Regular intervals indicate scripted behavior
 
@@ -173,23 +173,23 @@ def classify_user(username: str, days: int = 7) -> UserProfile:
 async def discover_and_fetch(username: str, days: int):
     # Phase 1: Repository Discovery (300 events)
     events = await get_user_events_paginated(username, max_events=300)
-    
-    # Phase 2: Repository Scoring & Selection  
+
+    # Phase 2: Repository Scoring & Selection
     repo_scores = self._score_repositories_by_development_activity(events)
     top_repos = sorted(repo_scores.items(), key=lambda x: x[1], reverse=True)[:15]
-    
+
     # Phase 3: Deep-dive Analysis
     all_events = []
     for repo_name, score in top_repos:
         repo_events = await fetch_repository_events(repo_name, username, days)
         all_events.extend(repo_events)
-        
+
     return deduplicate_events(all_events)
 ```
 
 **Repository Scoring Algorithm**:
 - **PushEvent**: 3 points (high development value)
-- **PullRequestEvent**: 2 points (collaboration + code)  
+- **PullRequestEvent**: 2 points (collaboration + code)
 - **ReleaseEvent**: 2 points (project milestones)
 - **Other Events**: 1 point (general activity)
 - **Minimum Threshold**: 2 points to filter noise
@@ -202,26 +202,26 @@ async def discover_and_fetch(username: str, days: int):
 async def discover_and_fetch(username: str, days: int):
     # Source 1: Owned Repositories
     owned_repos = await github_client.get_user_repositories(username)
-    
-    # Source 2: Event-Based Discovery  
+
+    # Source 2: Event-Based Discovery
     event_repos = await self._discover_repositories_from_events(username)
-    
+
     # Source 3: Commit Search Discovery
     search_repos = await self._discover_repositories_from_commits(username, days)
-    
+
     # Merge with priority-based scoring
     merged_repos = self._merge_repository_sources(owned_repos, event_repos, search_repos)
-    
+
     return await self._fetch_events_from_repositories(merged_repos, username, days)
 ```
 
 **Priority-Based Repository Merging**:
-1. **Base Contribution Score**: Activity level in repository  
+1. **Base Contribution Score**: Activity level in repository
 2. **Multi-Source Bonus**: +50% if repository appears in multiple sources
 3. **Owned Repository Boost**: 2x multiplier for user-owned repositories
 4. **Final Ranking**: Top 25-50 repositories based on composite score
 
-#### 4. AdaptiveRepositoryDiscovery (`adaptive_discovery.py`) 
+#### 4. AdaptiveRepositoryDiscovery (`adaptive_discovery.py`)
 **Purpose**: Main coordinator with production-grade reliability
 
 **Strategy Selection Logic**:
@@ -229,7 +229,7 @@ async def discover_and_fetch(username: str, days: int):
 def _select_strategy(user_profile: UserProfile, force_strategy: str = None) -> str:
     if force_strategy:
         return validate_and_return(force_strategy)
-        
+
     # Automatic selection based on user classification
     if user_profile.is_automation or user_profile.confidence > 0.8:
         return "multi_source"  # Comprehensive for power users/bots
@@ -256,14 +256,14 @@ GET /repos/{owner}/{repo}/events               # 5-15 calls (top repos)
 GET /user (if authenticated)                   # 1 call (user validation)
 ```
 
-**Rate Limiting**: 
+**Rate Limiting**:
 - REST API: 5000 requests/hour (authenticated)
 - Consumption: ~15-30 calls = 0.3-0.6% of quota
 - Frequency: Can run ~150-300 analyses per hour
 
 ### Multi-Source Strategy
 
-**API Calls**: ~60-120 requests  
+**API Calls**: ~60-120 requests
 **Endpoints Used**:
 ```
 GET /users/{username}/repos                    # 1-3 calls (owned repos)
@@ -275,7 +275,7 @@ GET /user (if authenticated)                   # 1 call (user validation)
 
 **Rate Limiting**:
 - REST API: ~90-110 calls = 1.8-2.2% of 5000/hour quota
-- Search API: ~3-10 calls = 10-33% of 30/minute quota  
+- Search API: ~3-10 calls = 10-33% of 30/minute quota
 - **Limiting Factor**: Search API (30 requests/minute)
 - Frequency: Can run ~6-10 analyses per hour (limited by Search API)
 
@@ -290,7 +290,7 @@ GET /user (if authenticated)                   # 1 call (user validation)
 - **Parallelization**: Repository fetches run concurrently
 
 **Multi-Source** (Power Users):
-- **Network Time**: ~90-240 seconds (more API calls)  
+- **Network Time**: ~90-240 seconds (more API calls)
 - **Processing Time**: ~15-45 seconds (complex merging, deduplication)
 - **Total Time**: ~2-5 minutes
 - **Parallelization**: All three sources discovered concurrently
@@ -315,7 +315,7 @@ GET /user (if authenticated)                   # 1 call (user validation)
 ## Rate Limiting Strategy
 
 ### GitHub API Limits
-- **REST API**: 5000 requests/hour (authenticated), 60/hour (unauthenticated)  
+- **REST API**: 5000 requests/hour (authenticated), 60/hour (unauthenticated)
 - **Search API**: 30 requests/minute (authenticated), 10/minute (unauthenticated)
 - **Secondary Rate Limit**: ~1 request/second for bursts
 
@@ -326,7 +326,7 @@ GET /user (if authenticated)                   # 1 call (user validation)
 # Efficient: Use specific repository endpoints
 GET /repos/owner/repo/events         # Targeted data
 
-# Inefficient: Over-fetch from user endpoints  
+# Inefficient: Over-fetch from user endpoints
 GET /users/username/events           # Generic data, needs filtering
 ```
 
@@ -335,12 +335,12 @@ GET /users/username/events           # Generic data, needs filtering
 async def fetch_multiple_repositories(repos: List[str]):
     # Process repositories in parallel with rate limiting
     semaphore = asyncio.Semaphore(10)  # Max 10 concurrent requests
-    
+
     async def fetch_with_limit(repo):
         async with semaphore:
             await rate_limiter.wait_if_needed()
             return await fetch_repository_events(repo)
-    
+
     tasks = [fetch_with_limit(repo) for repo in repos]
     return await asyncio.gather(*tasks, return_exceptions=True)
 ```
@@ -358,7 +358,7 @@ async def fetch_multiple_repositories(repos: List[str]):
 git-summary summary username --days 1
 # Time: ~15-30 seconds, API calls: ~5-10
 
-# Team leads: Weekly team analysis  
+# Team leads: Weekly team analysis
 git-summary summary username --days 7 --max-repos 15
 # Time: ~30-60 seconds, API calls: ~15-25
 ```
@@ -370,7 +370,7 @@ git-summary summary username --days 30
 # Auto-selects strategy, Time: ~1-3 minutes
 
 # Open source maintainers: Full comprehensive analysis
-git-summary summary username --days 30 --comprehensive  
+git-summary summary username --days 30 --comprehensive
 # Time: ~3-5 minutes, API calls: ~80-120
 ```
 
@@ -397,7 +397,7 @@ git-summary summary username --days 7          # Reduce time scope
 # Force fast strategy for quick insights
 git-summary summary username --force-strategy intelligence_guided
 
-# Only use comprehensive when needed  
+# Only use comprehensive when needed
 git-summary summary username --comprehensive   # For power users only
 ```
 
@@ -428,7 +428,7 @@ git-summary summary username --force-strategy intelligence_guided
 git-summary summary username --days 7
 ```
 
-#### "API rate limit exceeded" 
+#### "API rate limit exceeded"
 **Cause**: Too many requests in short time period
 **Solutions**:
 ```bash
@@ -502,7 +502,7 @@ git-summary auth
 # Limit scope
 git-summary summary username --max-repos 15 --days 21
 
-# Use streaming mode (reduce memory)  
+# Use streaming mode (reduce memory)
 git-summary summary username --max-events 2000
 ```
 
@@ -530,7 +530,7 @@ curl -H "Authorization: token YOUR_TOKEN" \
 
 ### Very New Accounts
 - **Issue**: <7 days of history may not have enough data for automation detection
-- **Behavior**: System defaults to intelligence-guided strategy  
+- **Behavior**: System defaults to intelligence-guided strategy
 - **Recommendation**: Use `--force-strategy multi_source` for complete analysis
 
 ## Performance Monitoring
@@ -546,7 +546,7 @@ git-summary summary username --output results.json
 The system reports:
 - **Total API Calls**: Number of requests made
 - **Analysis Strategy**: Which approach was selected
-- **Repository Count**: Number of repositories analyzed  
+- **Repository Count**: Number of repositories analyzed
 - **Event Count**: Total events discovered
 - **Execution Time**: Wall-clock time for analysis
 

@@ -118,42 +118,92 @@ class RichContext:
     estimated_tokens: int = 0
     content_priority: dict[str, int] = field(default_factory=dict)
 
+    def _safe_get_label_name(self, label: Any) -> str:
+        """Safely extract label name from various data types."""
+        if not label:
+            return ""
+
+        if hasattr(label, "get"):
+            # Dictionary-like object
+            return str(label.get("name", ""))
+        elif hasattr(label, "name"):
+            # Object with name attribute
+            return str(label.name)
+        else:
+            logger.warning(f"Unknown label type: {type(label)}, value: {label}")
+            return str(label)
+
+    def _safe_get_author_name(self, author: Any) -> str:
+        """Safely extract author name from various data types."""
+        logger.debug(f"_safe_get_author_name: {type(author)} = {author}")
+
+        if not author:
+            return "unknown"
+
+        if hasattr(author, "login"):
+            # Actor object with login attribute
+            return str(author.login)
+        elif hasattr(author, "get"):
+            # Dictionary-like object
+            return str(author.get("name", author.get("login", "unknown")))
+        elif hasattr(author, "name"):
+            # Object with name attribute
+            return str(author.name)
+        else:
+            logger.warning(
+                f"Unknown author type in _safe_get_author_name: {type(author)}, value: {author}"
+            )
+            return "unknown"
+
     def add_commit(self, event: GitHubEventLike, details: dict[str, Any]) -> None:
         """Add commit information to context."""
-        self.commits.append(
-            {
-                "sha": details.get("sha", "unknown"),
-                "message": details.get("message", ""),
-                "repository": event.repo.name if event.repo else "unknown",
-                "timestamp": parse_github_datetime(event.created_at),
-                "author": details.get("author", {}).get("name", "unknown"),
-                "additions": details.get("stats", {}).get("additions", 0),
-                "deletions": details.get("stats", {}).get("deletions", 0),
-                "files_changed": len(details.get("files", [])),
-            }
-        )
+        try:
+            self.commits.append(
+                {
+                    "sha": details.get("sha", "unknown"),
+                    "message": details.get("message", ""),
+                    "repository": event.repo.name if event.repo else "unknown",
+                    "timestamp": parse_github_datetime(event.created_at),
+                    "author": self._safe_get_author_name(details.get("author", {})),
+                    "additions": details.get("stats", {}).get("additions", 0),
+                    "deletions": details.get("stats", {}).get("deletions", 0),
+                    "files_changed": len(details.get("files", [])),
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error in add_commit: {e}")
+            logger.error(f"Details: {details}")
+            logger.error(f"Details type: {type(details)}")
+            for key, value in details.items():
+                logger.error(f"  {key}: {type(value)} = {value}")
+            raise
 
         if message := details.get("message", ""):
             self.commit_messages.append(message)
 
     def add_pull_request(self, event: GitHubEventLike, details: dict[str, Any]) -> None:
         """Add pull request information to context."""
-        self.pull_requests.append(
-            {
-                "number": details.get("number", 0),
-                "title": details.get("title", ""),
-                "state": details.get("state", "unknown"),
-                "repository": event.repo.name if event.repo else "unknown",
-                "timestamp": parse_github_datetime(event.created_at),
-                "author": details.get("user", {}).get("login", "unknown"),
-                "merged": details.get("merged", False),
-                "additions": details.get("additions", 0),
-                "deletions": details.get("deletions", 0),
-                "changed_files": details.get("changed_files", 0),
-                "comments": details.get("comments", 0),
-                "commits": details.get("commits", 0),
-            }
-        )
+        try:
+            self.pull_requests.append(
+                {
+                    "number": details.get("number", 0),
+                    "title": details.get("title", ""),
+                    "state": details.get("state", "unknown"),
+                    "repository": event.repo.name if event.repo else "unknown",
+                    "timestamp": parse_github_datetime(event.created_at),
+                    "author": self._safe_get_author_name(details.get("user", {})),
+                    "merged": details.get("merged", False),
+                    "additions": details.get("additions", 0),
+                    "deletions": details.get("deletions", 0),
+                    "changed_files": details.get("changed_files", 0),
+                    "comments": details.get("comments", 0),
+                    "commits": details.get("commits", 0),
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error in add_pull_request: {e}")
+            logger.error(f"Details: {details}")
+            raise
 
         if title := details.get("title", ""):
             self.pr_titles.append(title)
@@ -167,13 +217,15 @@ class RichContext:
                 "state": details.get("state", "unknown"),
                 "repository": event.repo.name if event.repo else "unknown",
                 "timestamp": parse_github_datetime(event.created_at),
-                "author": details.get("user", {}).get("login", "unknown"),
+                "author": self._safe_get_author_name(details.get("user", {})),
                 "labels": [
-                    label.get("name", "") for label in details.get("labels", [])
+                    self._safe_get_label_name(label)
+                    for label in details.get("labels", [])
                 ],
                 "comments": details.get("comments", 0),
                 "assignees": [
-                    user.get("login", "") for user in details.get("assignees", [])
+                    self._safe_get_author_name(user)
+                    for user in details.get("assignees", [])
                 ],
             }
         )
@@ -517,10 +569,34 @@ class ContextGatheringEngine:
                     commit_data.get("url", "") if hasattr(commit_data, "get") else "",
                 )
 
+                # Handle Author object properly
+                author_name = "unknown"
+                logger.debug(
+                    f"Processing commit_author: {type(commit_author)} = {commit_author}"
+                )
+                if hasattr(commit_author, "login"):
+                    # Actor object with login attribute
+                    author_name = commit_author.login
+                    logger.debug(f"Used Actor.login: {author_name}")
+                elif hasattr(commit_author, "get"):
+                    # Dictionary-like object
+                    author_name = commit_author.get(
+                        "name", commit_author.get("login", "unknown")
+                    )
+                    logger.debug(f"Used dict.get: {author_name}")
+                elif hasattr(commit_author, "name"):
+                    # Object with name attribute
+                    author_name = commit_author.name
+                    logger.debug(f"Used object.name: {author_name}")
+                else:
+                    logger.warning(
+                        f"Unknown author type: {type(commit_author)}, value: {commit_author}"
+                    )
+
                 commit_details = {
                     "sha": commit_sha,
                     "message": commit_message,
-                    "author": commit_author,
+                    "author": {"name": author_name},  # Always store as dict
                     "url": commit_url,
                     "stats": {"additions": 0, "deletions": 0},  # Default values
                 }

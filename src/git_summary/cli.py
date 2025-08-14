@@ -805,9 +805,16 @@ async def _perform_analysis(
                 console.print("[yellow]Analysis cancelled by user[/yellow]")
                 return
 
+            # Create progress callback to notify user of strategy decisions
+            def strategy_callback(message: str) -> None:
+                console.print(f"[cyan]→[/cyan] {message}")
+
             # Perform the adaptive analysis
             user_activity = await adaptive_discovery.analyze_user(
-                username=user, days=days, force_strategy=strategy_override
+                username=user,
+                days=days,
+                force_strategy=strategy_override,
+                progress_callback=strategy_callback,
             )
 
             # Validate analysis result
