@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import signal
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -17,6 +18,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from git_summary.adaptive_discovery import AdaptiveRepositoryDiscovery
 from git_summary.ai.orchestrator import ActivitySummarizer
 from git_summary.ai.personas import PersonaManager
 from git_summary.config import Config
@@ -31,6 +33,25 @@ app = typer.Typer(
 )
 
 console = Console()
+
+
+async def validate_github_token(token: str) -> bool:
+    """Validate GitHub token by making a simple API call.
+
+    Args:
+        token: GitHub Personal Access Token
+
+    Returns:
+        True if token is valid, False otherwise
+    """
+    try:
+        async with GitHubClient(token=token) as client:
+            # Use built-in token validation method - returns dict with validation info
+            result = await client.validate_token()
+            # Check if validation was successful (presence of user info indicates success)
+            return bool(result.get("login"))
+    except Exception:
+        return False
 
 
 @app.command()
@@ -63,7 +84,23 @@ def summary(
         "--max-events",
         help="Maximum number of events to process (useful for high-activity users)",
     ),
-    # Placeholder filtering options (MVP - not implemented yet)
+    # Strategy selection options
+    comprehensive: bool = typer.Option(
+        False,
+        "--comprehensive",
+        help="Force comprehensive multi-source discovery mode (for power users)",
+    ),
+    max_repos: int | None = typer.Option(
+        None,
+        "--max-repos",
+        help="Maximum number of repositories to analyze (default varies by strategy)",
+    ),
+    force_strategy: str | None = typer.Option(
+        None,
+        "--force-strategy",
+        help="Force specific strategy: 'intelligence_guided' or 'multi_source' (mainly for testing)",
+    ),
+    # Legacy filtering options (MVP - not implemented yet)
     include_events: str | None = typer.Option(
         None,
         "--include-events",
@@ -124,11 +161,27 @@ def summary(
     if output:
         print(f"[cyan]Output will be saved to: {output}[/cyan]")
 
+    # Validate strategy options
+    if comprehensive and force_strategy:
+        print("[red]Error: Cannot use both --comprehensive and --force-strategy[/red]")
+        raise typer.Exit(1)
+
+    # Convert comprehensive flag to strategy override
+    strategy_override = None
+    if comprehensive:
+        strategy_override = "multi_source"
+    elif force_strategy:
+        if force_strategy not in ["intelligence_guided", "multi_source"]:
+            print(f"[red]Error: Invalid strategy '{force_strategy}'. Must be 'intelligence_guided' or 'multi_source'[/red]")
+            raise typer.Exit(1)
+        strategy_override = force_strategy
+
     # Run the async analysis
     try:
         asyncio.run(
             _analyze_user_activity(
-                user, token, days, output, max_events, include_events
+                user, token, days, output, max_events, include_events,
+                strategy_override, max_repos
             )
         )
     except KeyboardInterrupt:
@@ -183,8 +236,21 @@ def ai_summary(
         "--estimate-cost",
         help="Show cost estimate without generating summary",
     ),
+    repo: list[str] | None = typer.Option(
+        None,
+        "--repo",
+        "-r",
+        help="Filter events to specific repositories (e.g., --repo owner/repo-name). Can be used multiple times.",
+    ),
 ) -> None:
-    """Generate an AI-powered summary of GitHub activity."""
+    """Generate an AI-powered summary of GitHub activity.
+
+    Examples:
+        git-summary ai-summary username
+        git-summary ai-summary username --repo owner/repo-name
+        git-summary ai-summary username --repo repo1 --repo owner/repo2
+        git-summary ai-summary username --days 30 --repo myorg/project
+    """
     config = Config()
 
     # Interactive mode: get username if not provided
@@ -239,6 +305,7 @@ def ai_summary(
                 max_events,
                 token_budget,
                 estimate_cost,
+                repo,
             )
         )
     except KeyboardInterrupt:
@@ -259,6 +326,7 @@ async def _generate_ai_summary(
     max_events: int | None,
     token_budget: int,
     estimate_cost: bool,
+    repo: list[str] | None,
 ) -> None:
     """Generate AI-powered summary of GitHub activity."""
     # Calculate date range
@@ -311,11 +379,12 @@ async def _generate_ai_summary(
             def update_progress(current: int, _total: int | None) -> None:
                 progress.update(fetch_task, events=current)
 
-            # Fetch events by date range
+            # Fetch events by date range with repository filtering
             events = await coordinator.fetch_events_by_date_range(
                 username=user,
                 start_date=start_date,
                 end_date=end_date,
+                repo_filters=repo,
                 max_pages=None,
                 max_events=max_events,
                 progress_callback=update_progress,
@@ -337,6 +406,10 @@ async def _generate_ai_summary(
             "ReleaseEvent",  # Releases
             "IssueCommentEvent",  # Issue comments
             "PullRequestReviewCommentEvent",  # PR review comments
+            "IssuesEvent",  # Issue creation, assignment, closing, labeling
+            "CreateEvent",  # Branch/tag creation
+            "DeleteEvent",  # Branch/tag deletion
+            "GollumEvent",  # Wiki edits
         }
 
         original_count = len(events)
@@ -345,7 +418,7 @@ async def _generate_ai_summary(
 
         console.print(
             f"[blue]→[/blue] Filtered to [cyan]{filtered_count}[/cyan] relevant events "
-            f"(commits, PRs, reviews, releases, comments)"
+            f"(commits, PRs, reviews, releases, comments, issues, branches)"
         )
 
         if original_count > filtered_count:
@@ -353,6 +426,8 @@ async def _generate_ai_summary(
                 f"[dim]  Excluded {original_count - filtered_count} events "
                 f"(stars, forks, watches, etc.)[/dim]"
             )
+
+        # Repository filtering is now handled by the coordinator strategy
 
         if not events:
             console.print(
@@ -556,14 +631,14 @@ def _save_ai_summary_to_file(summary_result: dict[str, Any], output_path: str) -
 
         markdown_content = f"""# GitHub Activity Summary
 
-**User:** {summary_result.get('user', 'Unknown')}
+**User:** {summary_result.get("user", "Unknown")}
 **Period:** {formatted_period}
-**AI Model:** {summary_result['model_used']}
-**Persona:** {summary_result['persona_used']}
+**AI Model:** {summary_result["model_used"]}
+**Persona:** {summary_result["persona_used"]}
 
 ## AI Analysis
 
-{summary_result['summary']}
+{summary_result["summary"]}
 
 ## Analysis Metadata
 
@@ -584,8 +659,19 @@ async def _analyze_user_activity(
     output: str | None,
     max_events: int | None,
     include_events: str | None,
+    strategy_override: str | None = None,
+    max_repos: int | None = None,
 ) -> None:
-    """Perform the actual GitHub activity analysis."""
+    """Perform the actual GitHub activity analysis with robust error handling."""
+    # Validate input parameters
+    if days > 365:
+        console.print("[red]Error: Analysis period cannot exceed 365 days[/red]")
+        raise typer.Exit(1)
+
+    if max_events and max_events < 1:
+        console.print("[red]Error: max-events must be greater than 0[/red]")
+        raise typer.Exit(1)
+
     # Calculate date range
     end_date = datetime.now(UTC)
     start_date = end_date - timedelta(days=days)
@@ -600,47 +686,186 @@ async def _analyze_user_activity(
         )
     )
 
-    # Initialize GitHub client and coordinator
-    client = GitHubClient(token=token)
-    coordinator = EventCoordinator(client)
-    processor = EventProcessor()
-
+    # Validate GitHub token first
+    console.print("[dim]Validating GitHub token...[/dim]")
     try:
-        # Fetch events with progress indication
+        if not await validate_github_token(token):
+            console.print("[red]Error: Invalid or expired GitHub token[/red]")
+            console.print("[yellow]Please check your token and try again, or run 'git-summary auth' to set up a new token[/yellow]")
+            raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error validating token: {e}[/red]")
+        raise typer.Exit(1)
+
+    # Set up signal handler for graceful shutdown
+    shutdown_event = asyncio.Event()
+
+    def signal_handler(_signum: int, _frame: Any) -> None:
+        console.print("\n[yellow]Cancelling analysis... Please wait for cleanup.[/yellow]")
+        shutdown_event.set()
+
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # Initialize resources with proper async context management
+    try:
+        async with asyncio.timeout(300):  # 5 minute timeout for entire analysis
+            async with GitHubClient(token=token) as client:
+                adaptive_discovery = AdaptiveRepositoryDiscovery(client)
+                processor = EventProcessor()
+
+                # Check for shutdown signal
+                if shutdown_event.is_set():
+                    console.print("[yellow]Analysis cancelled by user[/yellow]")
+                    return
+
+                await _perform_analysis(
+                    adaptive_discovery, processor, user, days, output,
+                    max_events, include_events, strategy_override, max_repos,
+                    shutdown_event, start_date, end_date
+                )
+
+    except TimeoutError:
+        console.print("[red]Analysis timed out after 5 minutes[/red]")
+        console.print("[yellow]Try reducing the analysis period with --days or limiting repositories with --max-repos[/yellow]")
+        raise typer.Exit(1)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Analysis cancelled by user[/yellow]")
+        raise typer.Exit(130)  # Standard exit code for Ctrl+C
+    except Exception as e:
+        console.print(f"[red]Analysis failed: {e}[/red]")
+        raise typer.Exit(1)
+
+
+async def _perform_analysis(
+    adaptive_discovery: AdaptiveRepositoryDiscovery,
+    processor: EventProcessor,
+    user: str,
+    days: int,
+    output: str | None,
+    max_events: int | None,
+    include_events: str | None,
+    strategy_override: str | None,
+    max_repos: int | None,
+    shutdown_event: asyncio.Event,
+    start_date: datetime,
+    end_date: datetime,
+) -> None:
+    """Perform the core analysis logic with cancellation support."""
+    try:
+        # Check for shutdown signal before starting
+        if shutdown_event.is_set():
+            console.print("[yellow]Analysis cancelled by user[/yellow]")
+            return
+
+        # Perform adaptive analysis with progress indication
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             TextColumn("•"),
-            TextColumn("[cyan]{task.fields[events]}[/cyan] events"),
+            TextColumn("[cyan]{task.fields[info]}[/cyan]"),
             TimeElapsedColumn(),
             console=console,
             transient=False,
         ) as progress:
-            # Create a task for fetching
-            fetch_task = progress.add_task(
-                f"Fetching events for [green]{user}[/green]...", events=0
+            # Phase 1: User profiling
+            profile_task = progress.add_task(
+                f"Analyzing user profile for [green]{user}[/green]...", info="profiling"
             )
 
-            def update_progress(current: int, _total: int | None) -> None:
-                progress.update(fetch_task, events=current)
+            # Phase 2: Adaptive analysis
+            analysis_task = progress.add_task(
+                "Running adaptive analysis...", info="analyzing"
+            )
 
-            # Fetch events by date range
-            events = await coordinator.fetch_events_by_date_range(
+            # Check for cancellation before analysis
+            if shutdown_event.is_set():
+                console.print("[yellow]Analysis cancelled by user[/yellow]")
+                return
+
+            # Perform the adaptive analysis
+            user_activity = await adaptive_discovery.analyze_user(
                 username=user,
-                start_date=start_date,
-                end_date=end_date,
-                max_pages=None,  # Fetch all available events
-                max_events=max_events,
-                progress_callback=update_progress,
+                days=days,
+                force_strategy=strategy_override
             )
+
+            # Validate analysis result
+            if not user_activity:
+                console.print("[red]Error: Analysis returned no results[/red]")
+                raise typer.Exit(1)
+
+            if not user_activity.events:
+                console.print(f"[yellow]No events found for user {user} in the last {days} days[/yellow]")
+                console.print("[dim]Try increasing the time range with --days or check if the user has recent activity[/dim]")
+                return
+
+            # Note: max_events and max_repos would be handled by the adaptive discovery
+            # system internally. For now, we apply max_events as a post-filter if specified.
+            # max_repos is currently handled by the individual strategy implementations.
+            if max_events and len(user_activity.events) > max_events:
+                original_count = len(user_activity.events)
+                user_activity.events = user_activity.events[:max_events]
+                console.print(f"[yellow]→[/yellow] Limited to {max_events} events (from {original_count} total)")
+
+            # TODO: Future enhancement - pass max_repos to adaptive discovery system
+            _ = max_repos  # Suppress unused argument warning
+
+            progress.update(profile_task, description=f"✓ Profiled [green]{user}[/green]", completed=True)
+
+            # Display strategy information with better error handling
+            strategy_used = getattr(user_activity, "analysis_strategy", "unknown")
+            if strategy_used == "unknown":
+                console.print("[yellow]Warning: Analysis strategy could not be determined[/yellow]")
+            elif strategy_used == "fallback":
+                console.print("[yellow]Warning: Using basic fallback strategy due to API limitations[/yellow]")
+            else:
+                strategy_display = {
+                    "intelligence_guided": "[blue]Intelligence-Guided Analysis[/blue] (optimized path)",
+                    "multi_source": "[magenta]Comprehensive Multi-Source Discovery[/magenta] (complete coverage)"
+                }.get(strategy_used, f"[yellow]{strategy_used}[/yellow]")
+                console.print(f"\n[green]→[/green] Strategy: {strategy_display}")
+
+            # Show automation classification if available
+            if hasattr(user_activity, "profile") and user_activity.profile:
+                classification = user_activity.profile.classification
+                confidence = user_activity.profile.confidence_score
+                if classification == "heavy-automation":
+                    console.print(f"[yellow]→[/yellow] User classified as automation (confidence: {confidence:.1%})")
+                else:
+                    console.print(f"[cyan]→[/cyan] User classified as {classification} developer (confidence: {confidence:.1%})")
+
+            events = user_activity.events
 
             progress.update(
-                fetch_task, description=f"✓ Fetched events for [green]{user}[/green]"
+                analysis_task,
+                description=f"✓ Analyzed {len(user_activity.repositories)} repositories",
+                info=f"{len(events)} events",
+                completed=True
             )
 
+        # Display comprehensive analysis results
         console.print(
-            f"\\n[green]✓[/green] Successfully fetched [cyan]{len(events)}[/cyan] events"
+            f"\n[green]✓[/green] Successfully analyzed [cyan]{len(events)}[/cyan] events from [blue]{len(user_activity.repositories)}[/blue] repositories"
         )
+
+        # Show repository coverage details
+        if user_activity.repositories:
+            console.print(f"[dim]  Repositories: {', '.join(user_activity.repositories[:5])}")
+            if len(user_activity.repositories) > 5:
+                console.print(f"[dim]  ... and {len(user_activity.repositories) - 5} more repositories")
+
+        # Show performance metrics if available
+        if hasattr(user_activity, "execution_time_ms") and user_activity.execution_time_ms:
+            execution_time = user_activity.execution_time_ms / 1000
+            console.print(f"[dim]  Analysis completed in {execution_time:.2f} seconds")
+
+        # Show strategy-specific stats if available
+        if hasattr(user_activity, "analysis_stats") and user_activity.analysis_stats:
+            stats = user_activity.analysis_stats
+            if isinstance(stats, dict) and "api_calls_made" in stats:
+                console.print(f"[dim]  API calls: {stats['api_calls_made']}")
+            elif hasattr(stats, "api_calls_made"):
+                console.print(f"[dim]  API calls: {stats.api_calls_made}")
 
         # Filter events by type if specified
         if include_events:
@@ -682,12 +907,23 @@ async def _analyze_user_activity(
             _save_report_to_file(report, output)
             console.print(f"\\n[green]✓[/green] Results saved to [cyan]{output}[/cyan]")
 
-    except Exception as e:
-        console.print(f"\\n[red]✗[/red] Analysis failed: {e}")
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Analysis cancelled by user[/yellow]")
         raise
-    finally:
-        # Clean up client connection
-        await client.close()
+    except Exception as e:
+        error_msg = str(e)
+        if "rate limit" in error_msg.lower():
+            console.print(f"[red]Rate limit exceeded: {error_msg}[/red]")
+            console.print("[yellow]Try again later or reduce the analysis scope with --days or --max-repos[/yellow]")
+        elif "not found" in error_msg.lower() or "404" in error_msg:
+            console.print(f"[red]User or repository not found: {error_msg}[/red]")
+            console.print("[yellow]Please check the username and ensure it exists on GitHub[/yellow]")
+        elif "permission" in error_msg.lower() or "403" in error_msg:
+            console.print(f"[red]Permission denied: {error_msg}[/red]")
+            console.print("[yellow]Please check your token permissions or try with a different token[/yellow]")
+        else:
+            console.print(f"[red]Analysis failed: {error_msg}[/red]")
+        raise
 
 
 def _display_activity_report(report: Any) -> None:
