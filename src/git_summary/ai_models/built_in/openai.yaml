@@ -1,0 +1,25 @@
+provider: "OpenAI"
+api_key_env: "OPENAI_API_KEY"
+
+models:
+  - name: "gpt-4o-mini"
+    display_name: "GPT-4o Mini"
+    description: "Fast, cost-effective model for most tasks"
+    context_limit: 128000
+    pricing:
+      input_per_1k: 0.150
+      output_per_1k: 0.600
+    capabilities: ["chat", "vision", "function_calling"]
+    tier: "low"
+    status: "stable"
+
+  - name: "gpt-4o"
+    display_name: "GPT-4o"
+    description: "High-quality model for complex analysis"
+    context_limit: 128000
+    pricing:
+      input_per_1k: 5.000
+      output_per_1k: 15.000
+    capabilities: ["chat", "vision", "function_calling"]
+    tier: "medium"
+    status: "stable"

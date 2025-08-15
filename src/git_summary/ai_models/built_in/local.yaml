@@ -1,0 +1,14 @@
+provider: "Local (Ollama)"
+api_key_env: ""  # No API key needed for local models
+
+models:
+  - name: "ollama/llama3.1"
+    display_name: "Llama 3.1 (Local)"
+    description: "Local model for private usage"
+    context_limit: 128000
+    pricing:
+      input_per_1k: 0.000
+      output_per_1k: 0.000
+    capabilities: ["chat"]
+    tier: "free"
+    status: "stable"

@@ -1,0 +1,36 @@
+provider: "Anthropic"
+api_key_env: "ANTHROPIC_API_KEY"
+
+models:
+  - name: "anthropic/claude-3-haiku-20240307"
+    display_name: "Claude 3 Haiku"
+    description: "Fast, efficient model for quick summaries"
+    context_limit: 200000
+    pricing:
+      input_per_1k: 0.250
+      output_per_1k: 1.250
+    capabilities: ["chat", "function_calling"]
+    tier: "low"
+    status: "stable"
+
+  - name: "anthropic/claude-3-5-sonnet-20241022"
+    display_name: "Claude 3.5 Sonnet"
+    description: "Advanced model for detailed analysis"
+    context_limit: 200000
+    pricing:
+      input_per_1k: 3.000
+      output_per_1k: 15.000
+    capabilities: ["chat", "function_calling", "vision"]
+    tier: "medium"
+    status: "stable"
+
+  - name: "anthropic/claude-3-7-sonnet-latest"
+    display_name: "Claude 3.7 Sonnet"
+    description: "Latest Claude 3.7 Sonnet with large context window (default)"
+    context_limit: 200000
+    pricing:
+      input_per_1k: 3.000
+      output_per_1k: 15.000
+    capabilities: ["chat", "function_calling", "vision"]
+    tier: "medium"
+    status: "stable"

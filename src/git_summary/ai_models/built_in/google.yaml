@@ -1,0 +1,14 @@
+provider: "Google"
+api_key_env: "GOOGLE_API_KEY"
+
+models:
+  - name: "google/gemini-1.5-pro"
+    display_name: "Gemini 1.5 Pro"
+    description: "Large context model for comprehensive analysis"
+    context_limit: 2000000
+    pricing:
+      input_per_1k: 3.500
+      output_per_1k: 10.500
+    capabilities: ["chat", "vision", "function_calling"]
+    tier: "medium"
+    status: "stable"

@@ -35,6 +35,7 @@ from git_summary.adaptive_discovery import AdaptiveRepositoryDiscovery
 # Internal imports still needed for AI features and token validation
 from git_summary.ai.orchestrator import ActivitySummarizer
 from git_summary.ai.personas import PersonaManager
+from git_summary.ai_models import ModelManager
 from git_summary.github_client import GitHubClient
 from git_summary.processors import EventProcessor
 
@@ -1787,6 +1788,139 @@ def reload_personas() -> None:
 
     except Exception as e:
         console.print(f"[red]❌ Error reloading personas: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("models")
+def list_models(
+    provider: str | None = typer.Option(
+        None,
+        "--provider",
+        "-p",
+        help="Filter by provider (e.g., openai, anthropic, groq)",
+    ),
+    show_details: bool = typer.Option(
+        False, "--details", "-d", help="Show detailed model information"
+    ),
+) -> None:
+    """List available AI models with status and cost information."""
+    try:
+        model_manager = ModelManager()
+
+        # Get models with filtering
+        if provider:
+            models = model_manager.get_available_models(provider=provider)
+            if not models:
+                console.print(f"[red]❌ No models found for provider: {provider}[/red]")
+                console.print(
+                    "[yellow]💡 Available providers: openai, anthropic, groq, google, local[/yellow]"
+                )
+                raise typer.Exit(1)
+        else:
+            models = model_manager.get_available_models()
+
+        # Get status information
+        models_with_status = model_manager.get_models_with_status()
+        status_map = {item["model"].name: item for item in models_with_status}
+
+        console.print(f"\n[bold]Available AI Models ({len(models)} total):[/bold]\n")
+
+        if show_details:
+            # Detailed view with expanded information
+            for model in models:
+                status_info = status_map.get(model.name, {})
+                status_text = status_info.get("status_text", "Unknown")
+                configured = status_info.get("configured", False)
+
+                # Create detailed panel
+                model_info = [
+                    f"[white]Provider:[/white] {model.provider}",
+                    f"[white]Description:[/white] {model.description}",
+                    f"[white]Context Limit:[/white] {model.context_limit:,} tokens",
+                    f"[white]Cost Tier:[/white] {model.tier.title()}",
+                    f"[white]Capabilities:[/white] {', '.join(model.capabilities)}",
+                    f"[white]Status:[/white] {'[green]' if configured else '[red]'}{status_text}{'[/green]' if configured else '[/red]'}",
+                ]
+
+                if model.tier != "free":
+                    model_info.extend(
+                        [
+                            f"[white]Input Cost:[/white] ${model.input_cost_per_1k:.3f}/1K tokens",
+                            f"[white]Output Cost:[/white] ${model.output_cost_per_1k:.3f}/1K tokens",
+                        ]
+                    )
+
+                console.print(
+                    Panel(
+                        "\n".join(model_info),
+                        title=f"[cyan]{model.display_name}[/cyan] ([dim]{model.name}[/dim])",
+                        border_style="blue" if configured else "red",
+                    )
+                )
+        else:
+            # Table view (default)
+            table = Table(show_header=True, header_style="bold blue")
+            table.add_column("Model", style="cyan", no_wrap=True)
+            table.add_column("Provider", style="yellow")
+            table.add_column("Cost Tier", style="green")
+            table.add_column("Status", style="white")
+
+            for model in models:
+                status_info = status_map.get(model.name, {})
+                status_text = status_info.get("status_text", "Unknown")
+                configured = status_info.get("configured", False)
+
+                # Clean up model name for display
+                display_name = model.name
+                if display_name.startswith("anthropic/"):
+                    display_name = display_name.replace("anthropic/", "")
+                elif display_name.startswith("groq/"):
+                    display_name = display_name.replace("groq/", "")
+                elif display_name.startswith("google/"):
+                    display_name = display_name.replace("google/", "")
+                elif display_name.startswith("ollama/"):
+                    display_name = display_name.replace("ollama/", "")
+
+                table.add_row(
+                    display_name,
+                    model.provider,
+                    model.tier.title(),
+                    status_text,
+                )
+
+            console.print(table)
+
+        # Show usage hints
+        console.print(
+            "\n[dim]💡 Use models with: [yellow]git-summary ai-summary --model <name> username[/yellow][/dim]"
+        )
+
+        # Show provider configuration hints
+        unconfigured_providers = set()
+        for model in models:
+            status_info = status_map.get(model.name, {})
+            if not status_info.get("configured", False):
+                unconfigured_providers.add(model.provider.lower())
+
+        if unconfigured_providers:
+            providers_list = ", ".join(sorted(unconfigured_providers))
+            console.print(
+                f"[dim]🔑 Configure API keys with: [yellow]git-summary ai-auth <provider>[/yellow] (providers: {providers_list})[/dim]"
+            )
+
+        # Show summary stats
+        total_models = len(models)
+        configured_models = sum(
+            1
+            for model in models
+            if status_map.get(model.name, {}).get("configured", False)
+        )
+        console.print(
+            f"[dim]📊 {configured_models}/{total_models} models configured and ready to use[/dim]"
+        )
+
+    except Exception as e:
+        console.print(f"[red]❌ Error listing models: {e}[/red]")
         raise typer.Exit(1)
 
 

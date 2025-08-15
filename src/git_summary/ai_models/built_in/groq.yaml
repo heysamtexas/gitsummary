@@ -1,0 +1,47 @@
+provider: "Groq"
+api_key_env: "GROQ_API_KEY"
+
+models:
+  - name: "groq/llama-3.1-8b-instant"
+    display_name: "Llama 3.1 8B Instant"
+    description: "Very fast model for quick summaries"
+    context_limit: 131072
+    pricing:
+      input_per_1k: 0.050
+      output_per_1k: 0.080
+    capabilities: ["chat"]
+    tier: "low"
+    status: "stable"
+
+  - name: "groq/llama-3.3-70b-versatile"
+    display_name: "Llama 3.3 70B Versatile"
+    description: "High-quality model with fast inference (fallback)"
+    context_limit: 131072
+    pricing:
+      input_per_1k: 0.590
+      output_per_1k: 0.790
+    capabilities: ["chat", "function_calling"]
+    tier: "low"
+    status: "stable"
+
+  - name: "groq/mixtral-8x7b-32768"
+    display_name: "Mixtral 8x7B"
+    description: "Balanced performance model"
+    context_limit: 32768
+    pricing:
+      input_per_1k: 0.240
+      output_per_1k: 0.240
+    capabilities: ["chat"]
+    tier: "low"
+    status: "stable"
+
+  - name: "groq/moonshotai/kimi-k2-instruct"
+    display_name: "Kimi K2 Instruct"
+    description: "Preview model for evaluation (may be discontinued)"
+    context_limit: 131072
+    pricing:
+      input_per_1k: 0.050
+      output_per_1k: 0.080
+    capabilities: ["chat"]
+    tier: "low"
+    status: "preview"

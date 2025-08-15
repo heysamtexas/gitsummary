@@ -11,6 +11,7 @@ from typing import Any
 import litellm
 from litellm import acompletion, completion
 
+from git_summary.ai_models import ModelManager
 from git_summary.config import Config
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,7 @@ class LLMClient:
         self.timeout = timeout
 
         # Configure LiteLLM
-        litellm.set_verbose = False  # type: ignore[attr-defined]  # We handle our own logging
+        litellm.set_verbose = False  # We handle our own logging
         litellm.drop_params = True  # Drop unsupported parameters gracefully
 
         # Set up API keys from config
@@ -319,127 +320,57 @@ class LLMClient:
         )  # Rough estimate: 4 chars per token
         estimated_output_tokens = self.max_tokens
 
-        # Basic cost estimates (these would need to be updated with current pricing)
-        cost_estimates = {
-            "gpt-4o-mini": {"input": 0.150, "output": 0.600},  # per 1M tokens
-            "gpt-4o": {"input": 2.50, "output": 10.00},
-            "claude-3-haiku": {"input": 0.25, "output": 1.25},
-            "claude-3-5-sonnet": {"input": 3.00, "output": 15.00},
-            "claude-3-7-sonnet": {"input": 3.00, "output": 15.00},  # estimated
-            "llama-3.1-70b": {"input": 0.59, "output": 0.79},  # Groq pricing
-            "llama-3.1-8b": {"input": 0.05, "output": 0.08},  # Groq pricing
-            "mixtral-8x7b": {"input": 0.24, "output": 0.24},  # Groq pricing
-            "gemini-1.5-pro": {"input": 3.50, "output": 10.50},  # Google pricing
-        }
-
-        # Find matching cost estimate
-        model_key = None
-        for key in cost_estimates:
-            if (
-                key.replace("-", "").replace(".", "")
-                in self.model.replace("-", "").replace(".", "").lower()
-            ):
-                model_key = key
-                break
-
-        if model_key:
-            costs = cost_estimates[model_key]
-            estimated_cost = (estimated_input_tokens / 1_000_000) * costs["input"] + (
-                estimated_output_tokens / 1_000_000
-            ) * costs["output"]
-        else:
-            estimated_cost = 0.01  # Unknown model, small default
-
-        return {
-            "estimated_input_tokens": estimated_input_tokens,
-            "estimated_output_tokens": estimated_output_tokens,
-            "estimated_cost_usd": round(estimated_cost, 4),
-            "model": self.model,
-            "currency": "USD",
-        }
+        # Use ModelManager for cost estimation
+        model_manager = ModelManager()
+        try:
+            cost_info = model_manager.estimate_cost(
+                self.model, estimated_input_tokens, estimated_output_tokens
+            )
+            return {
+                "estimated_input_tokens": estimated_input_tokens,
+                "estimated_output_tokens": estimated_output_tokens,
+                "estimated_cost_usd": cost_info["total_cost"],
+                "model": self.model,
+                "currency": "USD",
+            }
+        except ValueError:
+            # Fallback for unknown models
+            return {
+                "estimated_input_tokens": estimated_input_tokens,
+                "estimated_output_tokens": estimated_output_tokens,
+                "estimated_cost_usd": 0.01,  # Unknown model, small default
+                "model": self.model,
+                "currency": "USD",
+            }
 
     def get_available_models(self) -> list[dict[str, str]]:
         """Get list of available models with descriptions.
 
         Returns:
-            List of model info dicts
+            List of model info dicts (backward compatibility format)
         """
-        return [
-            {
-                "name": "anthropic/claude-3-7-sonnet-latest",
-                "provider": "Anthropic",
-                "description": "Latest Claude 3.7 Sonnet with large context window (default)",
-                "cost_tier": "Medium",
-                "context_window": "200K",
-            },
-            {
-                "name": "groq/llama-3.3-70b-versatile",
-                "provider": "Groq",
-                "description": "High-quality model with fast inference (fallback)",
-                "cost_tier": "Low",
-                "context_window": "131K",
-            },
-            {
-                "name": "groq/llama-3.1-8b-instant",
-                "provider": "Groq",
-                "description": "Very fast model for quick summaries",
-                "cost_tier": "Low",
-                "context_window": "131K",
-            },
-            {
-                "name": "groq/mixtral-8x7b-32768",
-                "provider": "Groq",
-                "description": "Balanced performance model",
-                "cost_tier": "Low",
-                "context_window": "32K",
-            },
-            {
-                "name": "gpt-4o-mini",
-                "provider": "OpenAI",
-                "description": "Fast, cost-effective model for most tasks",
-                "cost_tier": "Low",
-                "context_window": "128K",
-            },
-            {
-                "name": "gpt-4o",
-                "provider": "OpenAI",
-                "description": "High-quality model for complex analysis",
-                "cost_tier": "Medium",
-                "context_window": "128K",
-            },
-            {
-                "name": "anthropic/claude-3-haiku-20240307",
-                "provider": "Anthropic",
-                "description": "Fast, efficient model for quick summaries",
-                "cost_tier": "Low",
-                "context_window": "200K",
-            },
-            {
-                "name": "anthropic/claude-3-5-sonnet-20241022",
-                "provider": "Anthropic",
-                "description": "Advanced model for detailed analysis",
-                "cost_tier": "Medium",
-                "context_window": "200K",
-            },
-            {
-                "name": "google/gemini-1.5-pro",
-                "provider": "Google",
-                "description": "Large context model for comprehensive analysis",
-                "cost_tier": "Medium",
-                "context_window": "2M",
-            },
-            {
-                "name": "groq/moonshotai/kimi-k2-instruct",
-                "provider": "Groq (Moonshot AI)",
-                "description": "Preview model for evaluation (may be discontinued)",
-                "cost_tier": "Low",
-                "context_window": "131K",
-            },
-            {
-                "name": "ollama/llama3.1",
-                "provider": "Local (Ollama)",
-                "description": "Local model for private usage",
-                "cost_tier": "Free",
-                "context_window": "128K",
-            },
-        ]
+        model_manager = ModelManager()
+        models = model_manager.get_available_models()
+
+        # Convert to the expected format for backward compatibility
+        result = []
+        for model in models:
+            # Format context limit for display
+            if model.context_limit >= 1_000_000:
+                context_window = f"{model.context_limit // 1_000_000}M"
+            elif model.context_limit >= 1000:
+                context_window = f"{model.context_limit // 1000}K"
+            else:
+                context_window = str(model.context_limit)
+
+            result.append(
+                {
+                    "name": model.name,
+                    "provider": model.provider,
+                    "description": model.description,
+                    "cost_tier": model.tier.title(),
+                    "context_window": context_window,
+                }
+            )
+
+        return result
