@@ -69,6 +69,9 @@ class LLMClient:
         litellm.set_verbose = False  # We handle our own logging
         litellm.drop_params = True  # Drop unsupported parameters gracefully
 
+        # Initialize ModelManager instance
+        self._model_manager = ModelManager()
+
         # Set up API keys from config
         self._setup_api_keys()
 
@@ -321,9 +324,8 @@ class LLMClient:
         estimated_output_tokens = self.max_tokens
 
         # Use ModelManager for cost estimation
-        model_manager = ModelManager()
         try:
-            cost_info = model_manager.estimate_cost(
+            cost_info = self._model_manager.estimate_cost(
                 self.model, estimated_input_tokens, estimated_output_tokens
             )
             return {
@@ -349,8 +351,7 @@ class LLMClient:
         Returns:
             List of model info dicts (backward compatibility format)
         """
-        model_manager = ModelManager()
-        models = model_manager.get_available_models()
+        models = self._model_manager.get_available_models()
 
         # Convert to the expected format for backward compatibility
         result = []

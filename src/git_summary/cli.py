@@ -1805,7 +1805,13 @@ def list_models(
 ) -> None:
     """List available AI models with status and cost information."""
     try:
-        model_manager = ModelManager()
+        # Initialize ModelManager with error handling
+        try:
+            model_manager = ModelManager()
+        except Exception as e:
+            console.print(f"[red]❌ Failed to initialize model manager: {e}[/red]")
+            console.print("[yellow]💡 Check that model configuration files are valid[/yellow]")
+            raise typer.Exit(1)
 
         # Get models with filtering
         if provider:

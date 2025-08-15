@@ -79,41 +79,127 @@ class ModelManager:
         try:
             with open(yaml_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            logger.error(f"Invalid YAML syntax in {yaml_file}: {e}")
+            return
+        except PermissionError:
+            logger.error(f"Cannot read model file {yaml_file}: Permission denied")
+            return
+        except FileNotFoundError:
+            logger.error(f"Model file not found: {yaml_file}")
+            return
+        except Exception as e:
+            logger.error(f"Unexpected error reading {yaml_file}: {e}")
+            return
+
+        try:
+            # Validate required top-level fields
+            if not self._validate_provider_structure(data, yaml_file):
+                return
 
             provider_name = data["provider"]
             api_key_env = data["api_key_env"]
             models_data = data["models"]
 
             models = []
-            for model_data in models_data:
-                model = AIModel(
-                    name=model_data["name"],
-                    display_name=model_data.get("display_name", model_data["name"]),
-                    provider=provider_name,
-                    description=model_data["description"],
-                    context_limit=model_data["context_limit"],
-                    input_cost_per_1k=model_data["pricing"]["input_per_1k"],
-                    output_cost_per_1k=model_data["pricing"]["output_per_1k"],
-                    capabilities=model_data.get("capabilities", []),
-                    tier=model_data["tier"],
-                    status=model_data.get("status", "stable"),
-                    yaml_path=str(yaml_file),
+            for i, model_data in enumerate(models_data):
+                if not self._validate_model_definition(model_data, yaml_file, i):
+                    continue  # Skip invalid models but continue processing others
+
+                try:
+                    model = AIModel(
+                        name=model_data["name"],
+                        display_name=model_data.get("display_name", model_data["name"]),
+                        provider=provider_name,
+                        description=model_data["description"],
+                        context_limit=model_data["context_limit"],
+                        input_cost_per_1k=model_data["pricing"]["input_per_1k"],
+                        output_cost_per_1k=model_data["pricing"]["output_per_1k"],
+                        capabilities=model_data.get("capabilities", []),
+                        tier=model_data["tier"],
+                        status=model_data.get("status", "stable"),
+                        yaml_path=str(yaml_file),
+                    )
+                    models.append(model)
+                    self._models[model.name] = model
+                except Exception as e:
+                    logger.error(f"Error creating model {model_data.get('name', 'unknown')} from {yaml_file}: {e}")
+                    continue
+
+            if models:  # Only create provider if we have valid models
+                provider = AIProvider(
+                    name=provider_name,
+                    api_key_env=api_key_env,
+                    models=models,
                 )
-                models.append(model)
-                self._models[model.name] = model
+                self._providers[provider_name.lower()] = provider
+                logger.debug(f"Loaded {len(models)} models from {provider_name}")
+            else:
+                logger.warning(f"No valid models found in {yaml_file}")
 
-            provider = AIProvider(
-                name=provider_name,
-                api_key_env=api_key_env,
-                models=models,
-            )
-            self._providers[provider_name.lower()] = provider
-
-            logger.debug(f"Loaded {len(models)} models from {provider_name}")
-
+        except KeyError as e:
+            logger.error(f"Missing required field {e} in provider file {yaml_file}")
         except Exception as e:
-            logger.error(f"Error loading provider file {yaml_file}: {e}")
-            raise
+            logger.error(f"Unexpected error processing provider data from {yaml_file}: {e}")
+
+    def _validate_provider_structure(self, data: dict[str, Any], file_path: Path) -> bool:
+        """Validate provider YAML structure."""
+        required_fields = ["provider", "api_key_env", "models"]
+        for field in required_fields:
+            if field not in data:
+                logger.error(f"Provider file {file_path} missing required field '{field}'")
+                return False
+
+        if not isinstance(data["models"], list):
+            logger.error(f"Provider file {file_path}: 'models' must be a list")
+            return False
+
+        return True
+
+    def _validate_model_definition(self, model: dict[str, Any], file_path: Path, model_index: int) -> bool:
+        """Validate individual model definition."""
+        required_fields = ["name", "description", "context_limit", "pricing", "tier"]
+        for field in required_fields:
+            if field not in model:
+                logger.error(f"Model {model_index} in {file_path} missing required field '{field}'")
+                return False
+
+        # Validate pricing structure
+        pricing = model.get("pricing", {})
+        required_pricing_fields = ["input_per_1k", "output_per_1k"]
+        for field in required_pricing_fields:
+            if field not in pricing:
+                logger.error(f"Model {model.get('name', 'unknown')} in {file_path} missing pricing field '{field}'")
+                return False
+
+        # Validate data types
+        try:
+            context_limit = int(model["context_limit"])
+            if context_limit <= 0:
+                logger.error(f"Model {model.get('name', 'unknown')} in {file_path} has invalid context_limit")
+                return False
+        except (ValueError, TypeError):
+            logger.error(f"Model {model.get('name', 'unknown')} in {file_path} has non-numeric context_limit")
+            return False
+
+        # Validate pricing values
+        try:
+            input_cost = float(pricing["input_per_1k"])
+            output_cost = float(pricing["output_per_1k"])
+            if input_cost < 0 or output_cost < 0:
+                logger.error(f"Model {model.get('name', 'unknown')} in {file_path} has negative pricing")
+                return False
+        except (ValueError, TypeError):
+            logger.error(f"Model {model.get('name', 'unknown')} in {file_path} has invalid pricing values")
+            return False
+
+        # Validate tier
+        valid_tiers = ["free", "low", "medium", "high"]
+        if model["tier"].lower() not in valid_tiers:
+            logger.error(f"Model {model.get('name', 'unknown')} in {file_path} has invalid tier '{model['tier']}'. Must be one of: {valid_tiers}")
+            return False
+
+        return True
 
     def get_available_models(
         self, provider: str | None = None, capability: str | None = None
