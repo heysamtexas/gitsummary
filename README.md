@@ -5,6 +5,9 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/downloads/)
 [![Built with UV](https://img.shields.io/badge/built%20with-uv-green)](https://docs.astral.sh/uv/)
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Type checking: mypy](https://img.shields.io/badge/mypy-checked-blue)](http://mypy-lang.org/)
+[![Security: bandit](https://img.shields.io/badge/security-bandit-yellow.svg)](https://github.com/PyCQA/bandit)
+[![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
 
 Extract, analyze, and summarize GitHub user activity across repositories and projects. Get comprehensive insights into commits, issues, pull requests, and other GitHub events with beautiful CLI output.
 
