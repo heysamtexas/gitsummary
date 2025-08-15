@@ -26,7 +26,9 @@ def mock_github_client():
 
     # Set up default empty responses
     client.get_user_events_paginated.return_value = [[]]
-    client._make_request_with_retry.return_value.json.return_value = create_empty_response()
+    client._make_request_with_retry.return_value.json.return_value = (
+        create_empty_response()
+    )
     client._update_rate_limit_info = Mock()
     client.base_url = "https://api.github.com"
     client.headers = {"Authorization": "token test-token"}
@@ -44,10 +46,12 @@ class TestIntelligenceGuidedWorkflow:
 
         # Create events that will test the scoring workflow
         events = [
-            self._create_test_event("PushEvent", "1", "high-activity"),    # 3 points
-            self._create_test_event("PushEvent", "2", "high-activity"),    # 3 points
-            self._create_test_event("PullRequestEvent", "3", "high-activity"), # 2 points
-            self._create_test_event("IssuesEvent", "4", "low-activity"),   # 1 point
+            self._create_test_event("PushEvent", "1", "high-activity"),  # 3 points
+            self._create_test_event("PushEvent", "2", "high-activity"),  # 3 points
+            self._create_test_event(
+                "PullRequestEvent", "3", "high-activity"
+            ),  # 2 points
+            self._create_test_event("IssuesEvent", "4", "low-activity"),  # 1 point
         ]
 
         # Test the scoring logic
@@ -83,24 +87,29 @@ class TestIntelligenceGuidedWorkflow:
         event_type: str,
         event_id: str,
         repo_name: str,
-        created_at: str = "2024-01-01T12:00:00Z"
+        created_at: str = "2024-01-01T12:00:00Z",
     ) -> BaseGitHubEvent:
         """Create a test GitHub event."""
         return BaseGitHubEvent(
             id=event_id,
             type=event_type,
             actor=Actor(
-                id=123, login="test-user", display_login="test-user",
-                gravatar_id="", url="", avatar_url=""
+                id=123,
+                login="test-user",
+                display_login="test-user",
+                gravatar_id="",
+                url="",
+                avatar_url="",
             ),
             repo=Repository(
-                id=456, name=repo_name,
+                id=456,
+                name=repo_name,
                 url=f"https://api.github.com/repos/owner/{repo_name}",
-                full_name=f"owner/{repo_name}"
+                full_name=f"owner/{repo_name}",
             ),
             payload={},
             public=True,
-            created_at=created_at
+            created_at=created_at,
         )
 
     @pytest.mark.asyncio
@@ -112,7 +121,9 @@ class TestIntelligenceGuidedWorkflow:
         test_events = []
         for i in range(20):
             repo_name = f"repo-{i % 3}"  # 3 different repos
-            test_events.append(self._create_test_event("PushEvent", f"event_{i}", repo_name))
+            test_events.append(
+                self._create_test_event("PushEvent", f"event_{i}", repo_name)
+            )
 
         mock_github_client.get_user_events_paginated.return_value = [test_events]
 
@@ -121,13 +132,12 @@ class TestIntelligenceGuidedWorkflow:
 
         # Track execution with progress callback
         phase_calls = []
+
         def progress_callback(phase, current, total):
             phase_calls.append(phase)
 
         await analyzer.discover_and_fetch(
-            "test-user",
-            days=7,
-            progress_callback=progress_callback
+            "test-user", days=7, progress_callback=progress_callback
         )
 
         # Verify phases executed in correct order
@@ -140,7 +150,9 @@ class TestIntelligenceGuidedWorkflow:
         analyzer = IntelligenceGuidedAnalyzer(mock_github_client)
 
         # Mock API failure in phase 1
-        mock_github_client.get_user_events_paginated.side_effect = Exception("API Error")
+        mock_github_client.get_user_events_paginated.side_effect = Exception(
+            "API Error"
+        )
 
         # Should handle gracefully, not crash
         result = await analyzer.discover_and_fetch("error-user", days=7)
@@ -162,13 +174,21 @@ class TestMultiSourceDiscoveryWorkflow:
         test_data = create_repository_discovery_results()
 
         # Mock owned repositories API call
-        mock_github_client._make_request_with_retry.return_value.json.return_value = test_data["owned_repos"]
+        mock_github_client._make_request_with_retry.return_value.json.return_value = (
+            test_data["owned_repos"]
+        )
 
         # Mock user events for event-based discovery
         test_events = []
         for repo_name, repo_data in test_data["event_repos"].items():
             for _ in range(repo_data["score"]):  # Create events proportional to score
-                test_events.append(self._create_test_event("PushEvent", f"event_{len(test_events)}", repo_name.split("/")[1]))
+                test_events.append(
+                    self._create_test_event(
+                        "PushEvent",
+                        f"event_{len(test_events)}",
+                        repo_name.split("/")[1],
+                    )
+                )
 
         mock_github_client.get_user_events_paginated.return_value = [test_events]
 
@@ -187,6 +207,7 @@ class TestMultiSourceDiscoveryWorkflow:
 
         # Mock: owned repos fails, but other sources succeed
         call_count = 0
+
         def mock_api_call(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -212,12 +233,14 @@ class TestMultiSourceDiscoveryWorkflow:
         discovery = MultiSourceDiscovery(mock_github_client)
 
         # Create overlapping repository data across sources
-        owned_repo_response = [{
-            "full_name": "user/overlap-repo",
-            "updated_at": "2024-01-15T10:00:00Z",
-            "private": False,
-            "language": "Python"
-        }]
+        owned_repo_response = [
+            {
+                "full_name": "user/overlap-repo",
+                "updated_at": "2024-01-15T10:00:00Z",
+                "private": False,
+                "language": "Python",
+            }
+        ]
 
         # Same repo appears in events
         overlap_events = [
@@ -235,9 +258,9 @@ class TestMultiSourceDiscoveryWorkflow:
 
         # Setup mocks to return overlapping data
         responses = [
-            Mock(json=lambda: owned_repo_response),           # Owned repos
-            Mock(json=lambda: commit_search_response),        # Commit search
-            Mock(json=lambda: []),                            # Repository events (empty)
+            Mock(json=lambda: owned_repo_response),  # Owned repos
+            Mock(json=lambda: commit_search_response),  # Commit search
+            Mock(json=lambda: []),  # Repository events (empty)
         ]
         mock_github_client._make_request_with_retry.side_effect = responses
         mock_github_client.get_user_events_paginated.return_value = [overlap_events]
@@ -253,7 +276,9 @@ class TestComponentIntegration:
     """Test integration between different analysis components."""
 
     @pytest.mark.asyncio
-    async def test_automation_detector_with_multi_source_integration(self, mock_github_client):
+    async def test_automation_detector_with_multi_source_integration(
+        self, mock_github_client
+    ):
         """Test integration between automation detection and multi-source discovery."""
         # This tests the workflow where automation detection determines strategy
 
@@ -261,11 +286,15 @@ class TestComponentIntegration:
         discovery = MultiSourceDiscovery(mock_github_client)
 
         # Setup automation user events
-        automation_events = self._convert_to_github_events(create_automation_user_events()[:30])
+        automation_events = self._convert_to_github_events(
+            create_automation_user_events()[:30]
+        )
         mock_github_client.get_user_events_paginated.return_value = [automation_events]
 
         # Mock multi-source discovery APIs
-        mock_github_client._make_request_with_retry.return_value.json.return_value = {"items": []}
+        mock_github_client._make_request_with_retry.return_value.json.return_value = {
+            "items": []
+        }
 
         # Step 1: Detect automation user
         profile = await detector.classify_user("automation-user", days=7)
@@ -284,7 +313,7 @@ class TestComponentIntegration:
         detector = AutomationDetector(Mock())
 
         # Test that component errors don't crash the entire workflow
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             # Simulate a component error that should be caught by caller
             detector._calculate_issue_ratio(None)  # Invalid input
 
@@ -293,27 +322,34 @@ class TestComponentIntegration:
         event_type: str,
         event_id: str,
         repo_name: str,
-        created_at: str = "2024-01-01T12:00:00Z"
+        created_at: str = "2024-01-01T12:00:00Z",
     ) -> BaseGitHubEvent:
         """Create a test GitHub event."""
         return BaseGitHubEvent(
             id=event_id,
             type=event_type,
             actor=Actor(
-                id=123, login="test-user", display_login="test-user",
-                gravatar_id="", url="", avatar_url=""
+                id=123,
+                login="test-user",
+                display_login="test-user",
+                gravatar_id="",
+                url="",
+                avatar_url="",
             ),
             repo=Repository(
-                id=456, name=repo_name,
+                id=456,
+                name=repo_name,
                 url=f"https://api.github.com/repos/owner/{repo_name}",
-                full_name=f"owner/{repo_name}"
+                full_name=f"owner/{repo_name}",
             ),
             payload={},
             public=True,
-            created_at=created_at
+            created_at=created_at,
         )
 
-    def _convert_to_github_events(self, event_dicts: list[dict]) -> list[BaseGitHubEvent]:
+    def _convert_to_github_events(
+        self, event_dicts: list[dict]
+    ) -> list[BaseGitHubEvent]:
         """Convert dictionary events to BaseGitHubEvent objects."""
         events = []
         for event_dict in event_dicts:
@@ -329,17 +365,19 @@ class TestComponentIntegration:
                     display_login=actor_info.get("login", "test-user"),
                     gravatar_id="",
                     url="https://api.github.com/users/test-user",
-                    avatar_url="https://avatars.githubusercontent.com/u/123"
+                    avatar_url="https://avatars.githubusercontent.com/u/123",
                 ),
                 repo=Repository(
                     id=456,
                     name=repo_info.get("name", "test-repo"),
                     url=f"https://api.github.com/repos/test-owner/{repo_info.get('name', 'test-repo')}",
-                    full_name=repo_info.get("full_name", f"test-owner/{repo_info.get('name', 'test-repo')}")
+                    full_name=repo_info.get(
+                        "full_name", f"test-owner/{repo_info.get('name', 'test-repo')}"
+                    ),
                 ),
                 payload=event_dict.get("payload", {}),
                 public=True,
-                created_at=event_dict["created_at"]
+                created_at=event_dict["created_at"],
             )
             events.append(event)
 

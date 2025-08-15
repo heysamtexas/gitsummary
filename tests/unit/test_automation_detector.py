@@ -33,12 +33,15 @@ def automation_detector(mock_github_client):
 class TestAutomationDetector:
     """Test the automation detection algorithm logic."""
 
-    @pytest.mark.parametrize("issue_ratio,expected", [
-        (0.1, False),  # Low issue ratio - normal user
-        (0.75, True),  # High issue ratio - automation
-        (0.70, False), # Exactly at threshold - just under
-        (0.71, True),  # Just over threshold - automation
-    ])
+    @pytest.mark.parametrize(
+        "issue_ratio,expected",
+        [
+            (0.1, False),  # Low issue ratio - normal user
+            (0.75, True),  # High issue ratio - automation
+            (0.70, False),  # Exactly at threshold - just under
+            (0.71, True),  # Just over threshold - automation
+        ],
+    )
     def test_issue_ratio_threshold(self, automation_detector, issue_ratio, expected):
         """Test the issue event ratio threshold detection."""
         total_events = 100
@@ -57,20 +60,27 @@ class TestAutomationDetector:
             events.append(self._create_test_event("PushEvent", f"event_push_{i}"))
 
         # Test the actual implementation
-        indicators = automation_detector._calculate_automation_indicators(events, days=7)
+        indicators = automation_detector._calculate_automation_indicators(
+            events, days=7
+        )
         actual_ratio = indicators["issue_event_ratio"]
         is_automation = actual_ratio > automation_detector.ISSUE_RATIO_THRESHOLD
         assert is_automation == expected
 
         # Also verify the ratio calculation is correct
-        assert abs(actual_ratio - issue_ratio) < 0.01  # Allow small floating point differences
+        assert (
+            abs(actual_ratio - issue_ratio) < 0.01
+        )  # Allow small floating point differences
 
-    @pytest.mark.parametrize("repo_dominance,expected", [
-        (0.5, False),   # Balanced across repos - normal
-        (0.85, True),   # Single repo dominance - automation
-        (0.80, False),  # Exactly at threshold - just under
-        (0.81, True),   # Just over threshold - automation
-    ])
+    @pytest.mark.parametrize(
+        "repo_dominance,expected",
+        [
+            (0.5, False),  # Balanced across repos - normal
+            (0.85, True),  # Single repo dominance - automation
+            (0.80, False),  # Exactly at threshold - just under
+            (0.81, True),  # Just over threshold - automation
+        ],
+    )
     def test_single_repo_dominance(self, automation_detector, repo_dominance, expected):
         """Test single repository dominance detection."""
         total_events = 100
@@ -81,38 +91,45 @@ class TestAutomationDetector:
 
         # Events from dominant repository
         for i in range(dominant_repo_events):
-            events.append(self._create_test_event(
-                "PushEvent",
-                f"dominant_{i}",
-                repo_name="dominant-repo"
-            ))
+            events.append(
+                self._create_test_event(
+                    "PushEvent", f"dominant_{i}", repo_name="dominant-repo"
+                )
+            )
 
         # Events from other repositories
         repos = ["repo1", "repo2", "repo3", "repo4"]
         for i in range(other_repo_events):
             repo_name = repos[i % len(repos)]
-            events.append(self._create_test_event(
-                "PushEvent",
-                f"other_{i}",
-                repo_name=repo_name
-            ))
+            events.append(
+                self._create_test_event("PushEvent", f"other_{i}", repo_name=repo_name)
+            )
 
         # Test the actual implementation
-        indicators = automation_detector._calculate_automation_indicators(events, days=7)
+        indicators = automation_detector._calculate_automation_indicators(
+            events, days=7
+        )
         actual_dominance = indicators["single_repo_dominance"]
-        is_automation = actual_dominance > automation_detector.SINGLE_REPO_DOMINANCE_THRESHOLD
+        is_automation = (
+            actual_dominance > automation_detector.SINGLE_REPO_DOMINANCE_THRESHOLD
+        )
         assert is_automation == expected
 
         # Verify the dominance calculation is correct
         assert abs(actual_dominance - repo_dominance) < 0.01
 
-    @pytest.mark.parametrize("events_per_hour,expected", [
-        (2.0, False),  # Normal frequency
-        (6.0, True),   # High frequency - automation
-        (5.0, False),  # Exactly at threshold - just under
-        (5.1, True),   # Just over threshold - automation
-    ])
-    def test_high_frequency_detection(self, automation_detector, events_per_hour, expected):
+    @pytest.mark.parametrize(
+        "events_per_hour,expected",
+        [
+            (2.0, False),  # Normal frequency
+            (6.0, True),  # High frequency - automation
+            (5.0, False),  # Exactly at threshold - just under
+            (5.1, True),  # Just over threshold - automation
+        ],
+    )
+    def test_high_frequency_detection(
+        self, automation_detector, events_per_hour, expected
+    ):
         """Test high frequency event detection."""
         # Create events at the specified frequency over 24 hours
         hours = 24
@@ -125,16 +142,20 @@ class TestAutomationDetector:
             minute = (i * 60 // total_events) % 60
             timestamp = f"2024-01-01T{hour:02d}:{minute:02d}:00Z"
 
-            events.append(self._create_test_event(
-                "PushEvent",
-                f"freq_event_{i}",
-                created_at=timestamp
-            ))
+            events.append(
+                self._create_test_event(
+                    "PushEvent", f"freq_event_{i}", created_at=timestamp
+                )
+            )
 
         # Test the actual implementation
-        indicators = automation_detector._calculate_automation_indicators(events, days=7)
+        indicators = automation_detector._calculate_automation_indicators(
+            events, days=7
+        )
         actual_frequency = indicators["events_per_hour"]
-        is_automation = indicators["high_frequency_score"] > 1.0  # High frequency score threshold
+        is_automation = (
+            indicators["high_frequency_score"] > 1.0
+        )  # High frequency score threshold
         assert is_automation == expected
 
         # Verify frequency calculation is roughly correct (allow some variance for time calculations)
@@ -145,25 +166,31 @@ class TestAutomationDetector:
         # Create events at exact hourly intervals - strong automation signal
         regular_events = []
         for hour in range(24):
-            regular_events.append(self._create_test_event(
-                "PushEvent",
-                f"regular_{hour}",
-                created_at=f"2024-01-01T{hour:02d}:00:00Z"
-            ))
+            regular_events.append(
+                self._create_test_event(
+                    "PushEvent",
+                    f"regular_{hour}",
+                    created_at=f"2024-01-01T{hour:02d}:00:00Z",
+                )
+            )
 
         # Create events at random times - normal user pattern
         random_events = []
         random_times = ["09:15", "14:33", "16:07", "11:42", "15:58"]
         for i, time in enumerate(random_times):
-            random_events.append(self._create_test_event(
-                "PushEvent",
-                f"random_{i}",
-                created_at=f"2024-01-01T{time}:00Z"
-            ))
+            random_events.append(
+                self._create_test_event(
+                    "PushEvent", f"random_{i}", created_at=f"2024-01-01T{time}:00Z"
+                )
+            )
 
         # Test the actual implementation for timing patterns
-        regular_indicators = automation_detector._calculate_automation_indicators(regular_events, days=7)
-        random_indicators = automation_detector._calculate_automation_indicators(random_events, days=7)
+        regular_indicators = automation_detector._calculate_automation_indicators(
+            regular_events, days=7
+        )
+        random_indicators = automation_detector._calculate_automation_indicators(
+            random_events, days=7
+        )
 
         # Regular patterns should have higher frequency scores
         regular_freq = regular_indicators["events_per_hour"]
@@ -173,10 +200,14 @@ class TestAutomationDetector:
         assert regular_freq > random_freq
 
     @pytest.mark.asyncio
-    async def test_classify_user_automation_bot(self, automation_detector, mock_github_client):
+    async def test_classify_user_automation_bot(
+        self, automation_detector, mock_github_client
+    ):
         """Test classification of clear automation bot."""
         # Setup mock to return automation-like events
-        automation_events = self._convert_to_github_events(create_automation_user_events()[:50])
+        automation_events = self._convert_to_github_events(
+            create_automation_user_events()[:50]
+        )
         mock_github_client.get_user_events_paginated.return_value = [automation_events]
 
         profile = await automation_detector.classify_user("automation-bot", days=7)
@@ -184,10 +215,15 @@ class TestAutomationDetector:
         assert isinstance(profile, UserProfile)
         assert profile.is_automation is True
         assert profile.confidence_score > 0.8
-        assert "high issue ratio" in profile.indicators or "repo dominance" in profile.indicators
+        assert (
+            "high issue ratio" in profile.indicators
+            or "repo dominance" in profile.indicators
+        )
 
     @pytest.mark.asyncio
-    async def test_classify_user_normal_developer(self, automation_detector, mock_github_client):
+    async def test_classify_user_normal_developer(
+        self, automation_detector, mock_github_client
+    ):
         """Test classification of normal developer."""
         # Setup mock to return normal developer events
         normal_events = self._convert_to_github_events(create_normal_user_events())
@@ -201,7 +237,9 @@ class TestAutomationDetector:
         assert len(profile.indicators) >= 1
 
     @pytest.mark.asyncio
-    async def test_classify_user_no_activity(self, automation_detector, mock_github_client):
+    async def test_classify_user_no_activity(
+        self, automation_detector, mock_github_client
+    ):
         """Test classification when user has no activity."""
         # Setup mock to return empty events
         mock_github_client.get_user_events_paginated.return_value = [[]]
@@ -218,7 +256,9 @@ class TestAutomationDetector:
         events = [self._create_test_event("PushEvent", "single_event")]
 
         # Should not crash and should handle gracefully
-        indicators = automation_detector._calculate_automation_indicators(events, days=7)
+        indicators = automation_detector._calculate_automation_indicators(
+            events, days=7
+        )
 
         assert 0.0 <= indicators["issue_event_ratio"] <= 1.0
         assert 0.0 <= indicators["single_repo_dominance"] <= 1.0
@@ -233,7 +273,9 @@ class TestAutomationDetector:
         ]
 
         # Should handle without crashing
-        indicators = automation_detector._calculate_automation_indicators(events, days=7)
+        indicators = automation_detector._calculate_automation_indicators(
+            events, days=7
+        )
 
         assert indicators["events_per_hour"] >= 0.0
         assert 0.0 <= indicators["high_frequency_score"] <= 10.0  # Should be bounded
@@ -243,7 +285,7 @@ class TestAutomationDetector:
         event_type: str,
         event_id: str,
         repo_name: str = "test-repo",
-        created_at: str = "2024-01-01T12:00:00Z"
+        created_at: str = "2024-01-01T12:00:00Z",
     ) -> BaseGitHubEvent:
         """Create a test GitHub event for testing."""
         return BaseGitHubEvent(
@@ -255,20 +297,22 @@ class TestAutomationDetector:
                 display_login="test-user",
                 gravatar_id="",
                 url="https://api.github.com/users/test-user",
-                avatar_url="https://avatars.githubusercontent.com/u/123"
+                avatar_url="https://avatars.githubusercontent.com/u/123",
             ),
             repo=Repository(
                 id=456,
                 name=repo_name,
                 url=f"https://api.github.com/repos/test-owner/{repo_name}",
-                full_name=f"test-owner/{repo_name}"
+                full_name=f"test-owner/{repo_name}",
             ),
             payload={},
             public=True,
-            created_at=created_at
+            created_at=created_at,
         )
 
-    def _convert_to_github_events(self, event_dicts: list[dict]) -> list[BaseGitHubEvent]:
+    def _convert_to_github_events(
+        self, event_dicts: list[dict]
+    ) -> list[BaseGitHubEvent]:
         """Convert dictionary events to BaseGitHubEvent objects."""
         events = []
         for event_dict in event_dicts:
@@ -284,17 +328,19 @@ class TestAutomationDetector:
                     display_login=actor_info.get("login", "test-user"),
                     gravatar_id="",
                     url="https://api.github.com/users/test-user",
-                    avatar_url="https://avatars.githubusercontent.com/u/123"
+                    avatar_url="https://avatars.githubusercontent.com/u/123",
                 ),
                 repo=Repository(
                     id=456,
                     name=repo_info.get("name", "test-repo"),
                     url=f"https://api.github.com/repos/test-owner/{repo_info.get('name', 'test-repo')}",
-                    full_name=repo_info.get("full_name", f"test-owner/{repo_info.get('name', 'test-repo')}")
+                    full_name=repo_info.get(
+                        "full_name", f"test-owner/{repo_info.get('name', 'test-repo')}"
+                    ),
                 ),
                 payload=event_dict.get("payload", {}),
                 public=True,
-                created_at=event_dict["created_at"]
+                created_at=event_dict["created_at"],
             )
             events.append(event)
 

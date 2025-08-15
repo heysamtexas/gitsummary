@@ -409,9 +409,180 @@ class GitHubAnalyzer:
 
         self.validate_config(config)
 
-        # TODO: This will be implemented after we have the basic structure
-        # For now, return a placeholder
-        raise NotImplementedError("Analysis implementation coming in next milestone")
+        # Proper async/sync bridge with resource management
+        import asyncio
+
+        async def _run_analysis_with_cleanup() -> AnalysisResult:
+            """Run analysis with proper resource cleanup."""
+            try:
+                return await self._analyze_user_async_impl(
+                    username, config, progress_callback
+                )
+            except Exception as e:
+                # Map internal exceptions to library exceptions
+                raise self._map_internal_exception(e) from e
+
+        try:
+            # Use asyncio.run() with proper exception handling
+            return asyncio.run(_run_analysis_with_cleanup())
+        except Exception as e:
+            # Re-raise if already a library exception
+            if isinstance(e, GitHubAnalysisError):
+                raise
+            # Otherwise wrap in generic error
+            raise GitHubAnalysisError(f"Analysis failed: {e}") from e
+
+    async def _analyze_user_async_impl(
+        self,
+        username: str,
+        config: AnalysisConfig,
+        progress_callback: ProgressCallback | None = None,
+    ) -> AnalysisResult:
+        """Internal async implementation that bridges to existing code."""
+        import time
+        from datetime import UTC, datetime, timedelta
+
+        # Import existing components
+        from git_summary.adaptive_discovery import AdaptiveRepositoryDiscovery
+        from git_summary.github_client import GitHubClient
+        from git_summary.processors import EventProcessor
+
+        start_time = time.time()
+
+        # Create robust progress callback adapter with error handling
+        def simple_progress_callback(message: str) -> None:
+            if progress_callback:
+                try:
+                    # AdaptiveRepositoryDiscovery expects a simple string message callback
+                    # but our library ProgressCallback expects (current, total, message)
+                    # Pass 0, 1, message to indicate indeterminate progress
+                    progress_callback(0, 1, message)
+                except Exception as callback_error:
+                    # Log callback errors but don't fail the analysis
+                    import logging
+
+                    logging.warning(f"Progress callback failed: {callback_error}")
+
+        try:
+            # Calculate date range
+            end_date = datetime.now(UTC)
+            start_date = end_date - timedelta(days=config.days)
+
+            # Set up GitHub client and analysis components
+            async with GitHubClient(token=self.token) as client:
+                adaptive_discovery = AdaptiveRepositoryDiscovery(client)
+                processor = EventProcessor()
+
+                # Progress notification with error handling
+                self._safe_progress_callback(
+                    progress_callback, 0, 1, "Starting GitHub activity analysis"
+                )
+
+                # Map strategy enum to string for existing code
+                strategy_str = None
+                if config.strategy == AnalysisStrategy.INTELLIGENCE_GUIDED:
+                    strategy_str = "intelligence_guided"
+                elif config.strategy == AnalysisStrategy.MULTI_SOURCE:
+                    strategy_str = "multi_source"
+
+                # Perform analysis using existing implementation
+                user_activity = await adaptive_discovery.analyze_user(
+                    username,
+                    days=config.days,
+                    force_strategy=strategy_str,
+                    progress_callback=simple_progress_callback,
+                )
+
+                self._safe_progress_callback(
+                    progress_callback, 0, 1, "Processing events and generating report"
+                )
+
+                # Process events into report using EventProcessor
+                report = processor.process(
+                    events=user_activity.events,
+                    username=username,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+
+                self._safe_progress_callback(
+                    progress_callback, 1, 1, "Analysis complete"
+                )
+
+                # Calculate execution time
+                execution_time_ms = int((time.time() - start_time) * 1000)
+
+                # Create and return AnalysisResult
+                return AnalysisResult(
+                    username=username,
+                    start_date=start_date,
+                    end_date=end_date,
+                    analysis_strategy=user_activity.analysis_strategy,
+                    execution_time_ms=execution_time_ms,
+                    report=report,
+                    total_api_calls=getattr(client, "_api_calls_made", 0),
+                    repositories_discovered=len(user_activity.repositories),
+                )
+
+        except Exception as e:
+            # Map internal exceptions to library exceptions
+            raise self._map_internal_exception(e) from e
+
+    def _map_internal_exception(self, e: Exception) -> GitHubAnalysisError:
+        """Map internal exceptions to appropriate library exceptions.
+
+        Args:
+            e: The internal exception to map
+
+        Returns:
+            Appropriate library exception with preserved debugging information
+        """
+        error_msg = str(e).lower()
+
+        # Token-related errors
+        if "token" in error_msg and (
+            "invalid" in error_msg or "unauthorized" in error_msg or "401" in error_msg
+        ):
+            return InvalidTokenError(f"GitHub token is invalid or expired: {e}")
+
+        # User not found errors
+        if "not found" in error_msg or "404" in error_msg:
+            return UserNotFoundError(f"GitHub user not found: {e}")
+
+        # Rate limit errors
+        if "rate limit" in error_msg or "403" in error_msg:
+            return RateLimitError(f"GitHub API rate limit exceeded: {e}")
+
+        # Configuration errors
+        if (
+            "configuration" in error_msg
+            or "config" in error_msg
+            or "parameter" in error_msg
+        ):
+            return ConfigurationError(f"Configuration error: {e}")
+
+        # Generic error with type information for debugging
+        return GitHubAnalysisError(f"Internal error ({type(e).__name__}): {e}")
+
+    def _safe_progress_callback(
+        self, callback: ProgressCallback | None, current: int, total: int, message: str
+    ) -> None:
+        """Safely call progress callback with error handling.
+
+        Args:
+            callback: Progress callback function (can be None)
+            current: Current progress value
+            total: Total progress value
+            message: Progress message
+        """
+        if callback:
+            try:
+                callback(current, total, message)
+            except Exception as callback_error:
+                # Log callback errors but don't fail the analysis
+                import logging
+
+                logging.warning(f"Progress callback failed: {callback_error}")
 
     def validate_config(self, config: AnalysisConfig) -> None:
         """Validate configuration against GitHub API constraints.

@@ -59,17 +59,17 @@ class TestRepositoryScoringAlgorithms:
         analyzer = IntelligenceGuidedAnalyzer(Mock())
 
         events = [
-            self._create_test_event("PushEvent", "1", "repo-a"),      # Weight 3
-            self._create_test_event("PushEvent", "2", "repo-a"),      # Weight 3
-            self._create_test_event("PullRequestEvent", "3", "repo-a"), # Weight 2
-            self._create_test_event("IssuesEvent", "4", "repo-b"),    # Weight 1
-            self._create_test_event("ReleaseEvent", "5", "repo-b"),   # Weight 2
+            self._create_test_event("PushEvent", "1", "repo-a"),  # Weight 3
+            self._create_test_event("PushEvent", "2", "repo-a"),  # Weight 3
+            self._create_test_event("PullRequestEvent", "3", "repo-a"),  # Weight 2
+            self._create_test_event("IssuesEvent", "4", "repo-b"),  # Weight 1
+            self._create_test_event("ReleaseEvent", "5", "repo-b"),  # Weight 2
         ]
 
         scores = analyzer._score_repositories_by_development_activity(events)
 
         assert scores["repo-a"] == 3 + 3 + 2  # 8 total
-        assert scores["repo-b"] == 1 + 2      # 3 total
+        assert scores["repo-b"] == 1 + 2  # 3 total
 
     def test_repository_scoring_with_threshold(self):
         """Test that repository scoring applies minimum threshold correctly."""
@@ -77,9 +77,11 @@ class TestRepositoryScoringAlgorithms:
 
         # Create events with varying activity levels
         events = [
-            self._create_test_event("PushEvent", "1", "high-activity"),    # 3 points
-            self._create_test_event("PushEvent", "2", "high-activity"),    # 3 points
-            self._create_test_event("IssuesEvent", "3", "low-activity"),   # 1 point - below threshold
+            self._create_test_event("PushEvent", "1", "high-activity"),  # 3 points
+            self._create_test_event("PushEvent", "2", "high-activity"),  # 3 points
+            self._create_test_event(
+                "IssuesEvent", "3", "low-activity"
+            ),  # 1 point - below threshold
         ]
 
         # Test scoring with threshold
@@ -95,7 +97,9 @@ class TestRepositoryScoringAlgorithms:
 
         # Create very low activity events
         events = [
-            self._create_test_event("WatchEvent", "1", "minimal-activity"),  # Low weight event
+            self._create_test_event(
+                "WatchEvent", "1", "minimal-activity"
+            ),  # Low weight event
         ]
 
         repo_scores = analyzer._score_repositories_by_development_activity(events)
@@ -108,18 +112,16 @@ class TestRepositoryScoringAlgorithms:
         discovery = MultiSourceDiscovery(mock_github_client)
 
         # Test data that would expose the previous scoring bug
-        owned_repos = {
-            "user/owned-repo": {"source": "owned", "score": 3}
-        }
+        owned_repos = {"user/owned-repo": {"source": "owned", "score": 3}}
 
         event_repos = {
             "user/owned-repo": {"source": "events", "score": 5},
-            "external/contributed": {"source": "events", "score": 8}
+            "external/contributed": {"source": "events", "score": 8},
         }
 
         commit_repos = {
             "user/owned-repo": {"source": "commits", "score": 2},
-            "external/contributed": {"source": "commits", "score": 1}
+            "external/contributed": {"source": "commits", "score": 1},
         }
 
         final_repos = discovery._merge_repository_sources(
@@ -142,7 +144,7 @@ class TestRepositoryScoringAlgorithms:
         event_repos = {
             "user/main": {"source": "events", "score": 4},
             "org/work": {"source": "events", "score": 10},  # Higher base score
-            "user/side": {"source": "events", "score": 2}
+            "user/side": {"source": "events", "score": 2},
         }
         commit_repos = {"user/main": {"source": "commits", "score": 1}}
 
@@ -177,13 +179,17 @@ class TestRepositoryScoringAlgorithms:
             id="test",
             type="PushEvent",
             actor=Actor(
-                id=123, login="user", display_login="user",
-                gravatar_id="", url="", avatar_url=""
+                id=123,
+                login="user",
+                display_login="user",
+                gravatar_id="",
+                url="",
+                avatar_url="",
             ),
             repo=None,  # Missing repo info
             payload={},
             public=True,
-            created_at="2024-01-01T12:00:00Z"
+            created_at="2024-01-01T12:00:00Z",
         )
 
         # Should not crash, should skip events without repo info
@@ -196,7 +202,9 @@ class TestRepositoryScoringAlgorithms:
 
         # Create duplicate events (same ID)
         event1 = self._create_test_event("PushEvent", "duplicate_id", "repo1")
-        event2 = self._create_test_event("PullRequestEvent", "duplicate_id", "repo2")  # Same ID
+        event2 = self._create_test_event(
+            "PullRequestEvent", "duplicate_id", "repo2"
+        )  # Same ID
         event3 = self._create_test_event("IssuesEvent", "unique_id", "repo1")
 
         events = [event1, event2, event3]
@@ -230,22 +238,27 @@ class TestRepositoryScoringAlgorithms:
         event_type: str,
         event_id: str,
         repo_name: str,
-        created_at: str = "2024-01-01T12:00:00Z"
+        created_at: str = "2024-01-01T12:00:00Z",
     ) -> BaseGitHubEvent:
         """Create a test GitHub event."""
         return BaseGitHubEvent(
             id=event_id,
             type=event_type,
             actor=Actor(
-                id=123, login="test-user", display_login="test-user",
-                gravatar_id="", url="", avatar_url=""
+                id=123,
+                login="test-user",
+                display_login="test-user",
+                gravatar_id="",
+                url="",
+                avatar_url="",
             ),
             repo=Repository(
-                id=456, name=repo_name,
+                id=456,
+                name=repo_name,
                 url=f"https://api.github.com/repos/owner/{repo_name}",
-                full_name=f"owner/{repo_name}"
+                full_name=f"owner/{repo_name}",
             ),
             payload={},
             public=True,
-            created_at=created_at
+            created_at=created_at,
         )

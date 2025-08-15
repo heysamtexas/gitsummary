@@ -18,10 +18,23 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+# Library API imports (clean public interface)
+from git_summary import (
+    AnalysisConfig,
+    AnalysisResult,
+    Config,
+    ConfigurationError,
+    GitHubAnalyzer,
+    InvalidTokenError,
+    UserNotFoundError,
+)
+
+# Temporary imports for legacy functions (to be removed)
 from git_summary.adaptive_discovery import AdaptiveRepositoryDiscovery
+
+# Internal imports still needed for AI features and token validation
 from git_summary.ai.orchestrator import ActivitySummarizer
 from git_summary.ai.personas import PersonaManager
-from git_summary.config import Config
 from git_summary.github_client import GitHubClient
 from git_summary.processors import EventProcessor
 
@@ -32,6 +45,106 @@ app = typer.Typer(
 )
 
 console = Console()
+
+
+def _validate_cli_params(
+    days: int | None = None,
+    max_repos: int | None = None,
+    force_strategy: str | None = None,
+    max_events: int | None = None,
+) -> None:
+    """Validate CLI parameters before creating config.
+
+    Args:
+        days: Number of days to analyze
+        max_repos: Maximum repositories to analyze
+        force_strategy: Forced analysis strategy
+        max_events: Maximum events to process
+
+    Raises:
+        typer.BadParameter: If any parameter is invalid
+    """
+    errors = []
+
+    if days is not None and days < 1:
+        errors.append("--days must be positive")
+    if days is not None and days > 90:
+        errors.append("--days cannot exceed 90 (GitHub API limitation)")
+
+    if max_repos is not None and max_repos < 1:
+        errors.append("--max-repos must be positive")
+
+    if max_events is not None and max_events < 1:
+        errors.append("--max-events must be positive")
+
+    if force_strategy and force_strategy not in ["intelligence_guided", "multi_source"]:
+        errors.append(
+            f"Invalid --force-strategy: {force_strategy}. Must be 'intelligence_guided' or 'multi_source'"
+        )
+
+    if errors:
+        raise typer.BadParameter("\n".join(errors))
+
+
+def _print_analysis_summary(result: AnalysisResult) -> None:
+    """Print a nicely formatted analysis summary to the console."""
+    # Summary panel
+    summary_text = (
+        f"[bold cyan]Analysis Complete![/bold cyan]\n\n"
+        f"[white]User:[/white] [green]{result.username}[/green]\n"
+        f"[white]Period:[/white] [blue]{result.start_date.strftime('%Y-%m-%d')} to {result.end_date.strftime('%Y-%m-%d')}[/blue]\n"
+        f"[white]Duration:[/white] [yellow]{result.analysis_period_days} days[/yellow]\n"
+        f"[white]Strategy:[/white] [magenta]{result.analysis_strategy}[/magenta]"
+    )
+
+    if result.execution_time_ms:
+        summary_text += f"\n[white]Execution Time:[/white] [cyan]{result.execution_time_ms / 1000:.1f}s[/cyan]"
+
+    console.print(Panel.fit(summary_text, title="📊 GitHub Activity Summary"))
+
+    # Statistics table
+    stats_table = Table(
+        title="Activity Statistics", show_header=True, header_style="bold magenta"
+    )
+    stats_table.add_column("Metric", style="cyan", no_wrap=True)
+    stats_table.add_column("Value", style="green")
+
+    stats_table.add_row("Total Events", str(result.total_events))
+    stats_table.add_row("Repositories", str(result.total_repositories))
+    stats_table.add_row("Commits (Push Events)", str(result.total_commits))
+    stats_table.add_row("Pull Requests", str(result.total_pull_requests))
+    stats_table.add_row("Issues", str(result.total_issues))
+
+    if result.most_active_repository:
+        stats_table.add_row("Most Active Repository", result.most_active_repository)
+    if result.most_common_event_type:
+        stats_table.add_row("Most Common Event", result.most_common_event_type)
+
+    console.print(stats_table)
+
+    # Event breakdown table
+    if result.event_breakdown:
+        event_table = Table(
+            title="Event Type Breakdown", show_header=True, header_style="bold magenta"
+        )
+        event_table.add_column("Event Type", style="cyan", no_wrap=True)
+        event_table.add_column("Count", style="green", justify="right")
+
+        # Sort by count (descending)
+        for event_type, count in sorted(
+            result.event_breakdown.items(), key=lambda x: x[1], reverse=True
+        ):
+            event_table.add_row(event_type, str(count))
+
+        console.print(event_table)
+
+    # Performance metrics
+    if hasattr(result, "total_api_calls") and result.total_api_calls > 0:
+        perf_text = (
+            f"[dim]Performance: {result.total_api_calls} API calls, "
+            f"{result.repositories_discovered} repositories discovered[/dim]"
+        )
+        console.print(perf_text)
 
 
 async def validate_github_token(token: str) -> bool:
@@ -114,6 +227,9 @@ def summary(
     """Generate a summary of GitHub activity for a user."""
     config = Config()
 
+    # Validate CLI parameters
+    _validate_cli_params(days, max_repos, force_strategy)
+
     # Interactive mode: get username if not provided
     if not user:
         user = Prompt.ask("[cyan]Enter GitHub username to analyze")
@@ -177,23 +293,64 @@ def summary(
             raise typer.Exit(1)
         strategy_override = force_strategy
 
-    # Run the async analysis
+    # Use library API for analysis
     try:
-        asyncio.run(
-            _analyze_user_activity(
-                user,
-                token,
-                days,
-                output,
-                max_events,
-                include_events,
-                strategy_override,
-                max_repos,
-            )
+        # Map CLI parameters to library configuration
+        config_builder = AnalysisConfig.builder().days(days)
+
+        if max_events:
+            config_builder = config_builder.max_events(max_events)
+
+        if include_events:
+            event_list = include_events.split(",")
+            config_builder = config_builder.include_events(event_list)
+
+        if max_repos:
+            config_builder = config_builder.max_repos(max_repos)
+
+        # Apply strategy
+        if strategy_override == "intelligence_guided":
+            config_builder = config_builder.intelligence_guided()
+        elif strategy_override == "multi_source":
+            config_builder = config_builder.comprehensive()
+
+        analysis_config = config_builder.build()
+
+        # Create analyzer and run analysis
+        analyzer = GitHubAnalyzer(token)
+
+        # Progress callback for Rich UI
+        def progress_callback(_current: int, _total: int, message: str) -> None:
+            print(f"[dim]{message}[/dim]")
+
+        # Perform analysis using library API
+        result = analyzer.analyze_user(user, analysis_config, progress_callback)
+
+        # Handle output
+        if output:
+            output_path = Path(output)
+            with output_path.open("w") as f:
+                json.dump(result.to_dict(), f, indent=2)
+            print(f"[green]✓ Results saved to {output}[/green]")
+        else:
+            # Print summary to console
+            _print_analysis_summary(result)
+
+    except InvalidTokenError as e:
+        print(f"[red]Invalid GitHub token: {e}[/red]")
+        print(
+            "[yellow]Please check your token and try again, or run 'git-summary auth' to set up a new token[/yellow]"
         )
-    except KeyboardInterrupt:
-        print("\n[red]Operation cancelled by user[/red]")
         raise typer.Exit(1)
+    except UserNotFoundError as e:
+        print(f"[red]User not found: {e}[/red]")
+        raise typer.Exit(1)
+    except ConfigurationError as e:
+        print(f"[red]Configuration error: {e}[/red]")
+        raise typer.Exit(1)
+    except KeyboardInterrupt:
+        print("\n[yellow]Analysis cancelled by user[/yellow]")
+        raise typer.Exit(130)
     except Exception as e:
         print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
@@ -234,9 +391,9 @@ def ai_summary(
         help="Maximum number of events to process (default: 500 for better date range coverage)",
     ),
     token_budget: int = typer.Option(
-        8000,
+        200,
         "--token-budget",
-        help="Token budget for AI context gathering",
+        help="Token budget for AI context gathering (200-1000 range)",
     ),
     estimate_cost: bool = typer.Option(
         False,
@@ -259,6 +416,13 @@ def ai_summary(
         git-summary ai-summary username --days 30 --repo myorg/project
     """
     config = Config()
+
+    # Validate CLI parameters
+    _validate_cli_params(days, None, None, max_events)
+
+    # Additional AI-specific validation
+    if token_budget < 50 or token_budget > 1000:
+        raise typer.BadParameter("--token-budget must be between 50 and 1000")
 
     # Interactive mode: get username if not provided
     if not user:
