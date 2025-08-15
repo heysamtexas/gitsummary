@@ -122,6 +122,8 @@ uv run radon mi src/                    # Maintainability index (A/B/C rankings)
 uv run radon raw src/                   # Raw metrics (LOC, comments, etc.)
 uv run vulture src/                     # Dead code detection
 uv run vulture src/ --min-confidence 90  # High-confidence dead code only
+uv run bandit -r src/                   # Security vulnerability scanning
+uv run bandit -r src/ --format json     # JSON output for programmatic analysis
 ```
 
 ### Development Guidelines
@@ -147,7 +149,8 @@ uv run vulture src/ --min-confidence 90  # High-confidence dead code only
    - Use `radon cc` to identify functions with high cyclomatic complexity (aim for Rank A/B, avoid C+ complexity)
    - Check maintainability with `radon mi` (target A-rank maintainability index)
    - Clean up dead code identified by `vulture` (focus on high-confidence findings)
-   - Track quality trends over time - complexity should not increase without justification
+   - Run `bandit` security scans to identify potential vulnerabilities (current baseline: 2 low-severity findings)
+   - Track quality trends over time - complexity and security issues should not increase without justification
 
 ## CLI Features
 

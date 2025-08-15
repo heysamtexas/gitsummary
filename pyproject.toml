@@ -42,6 +42,7 @@ dev = [
     "mypy>=1.8.0",
     "vulture>=2.14",
     "radon>=6.0.1",
+    "bandit>=1.7.5",
 ]
 
 [project.urls]
@@ -152,3 +153,8 @@ exclude_lines = [
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod",
 ]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+confidence = "medium"
+severity = "medium"
