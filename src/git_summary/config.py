@@ -4,16 +4,21 @@ import json
 from pathlib import Path
 from typing import Any
 
-from rich import print
+from git_summary.progress import ProgressCallback, ProgressNotifier
 
 
 class Config:
     """Manage git-summary configuration and token storage."""
 
-    def __init__(self) -> None:
-        """Initialize config with default paths."""
+    def __init__(self, progress_callback: ProgressCallback | None = None) -> None:
+        """Initialize config with default paths.
+
+        Args:
+            progress_callback: Optional callback for progress notifications
+        """
         self.config_dir = Path.home() / ".git-summary"
         self.config_file = self.config_dir / "config.json"
+        self._progress = ProgressNotifier(progress_callback)
         self._ensure_config_dir()
 
     def _ensure_config_dir(self) -> None:
@@ -52,7 +57,7 @@ class Config:
 
         # Set restrictive permissions on the config file
         self.config_file.chmod(0o600)
-        print(f"[green]✓[/green] Token stored securely in {self.config_file}")
+        self._progress.completed(f"Token stored securely in {self.config_file}")
 
     def remove_token(self) -> None:
         """Remove stored GitHub token."""
@@ -66,7 +71,7 @@ class Config:
             # Remove empty config file
             self.config_file.unlink(missing_ok=True)
 
-        print("[green]✓[/green] Token removed from local storage")
+        self._progress.completed("Token removed from local storage")
 
     def _load_config(self) -> dict[str, Any]:
         """Load existing config or return empty dict."""
@@ -110,8 +115,8 @@ class Config:
 
         # Set restrictive permissions on the config file
         self.config_file.chmod(0o600)
-        print(
-            f"[green]✓[/green] {provider.title()} API key stored securely in {self.config_file}"
+        self._progress.completed(
+            f"{provider.title()} API key stored securely in {self.config_file}"
         )
 
     def remove_ai_api_key(self, provider: str) -> None:
@@ -137,11 +142,11 @@ class Config:
                 # Remove empty config file
                 self.config_file.unlink(missing_ok=True)
 
-            print(
-                f"[green]✓[/green] {provider.title()} API key removed from local storage"
+            self._progress.completed(
+                f"{provider.title()} API key removed from local storage"
             )
         else:
-            print(f"[yellow]No {provider} API key found to remove[/yellow]")
+            self._progress.info(f"No {provider} API key found to remove")
 
     def list_ai_api_keys(self) -> dict[str, bool]:
         """List which AI API keys are configured.
