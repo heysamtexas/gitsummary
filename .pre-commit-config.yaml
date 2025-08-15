@@ -26,3 +26,10 @@ repos:
           - pydantic
           - typer
           - rich
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: '1.7.5'
+    hooks:
+      - id: bandit
+        args: ['--severity', 'medium', '--confidence', 'medium']
+        files: \.py$
