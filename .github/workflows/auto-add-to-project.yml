@@ -1,0 +1,19 @@
+name: Auto-add issues and PRs to project
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+jobs:
+  add-to-project:
+    name: Add issue or PR to project
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add to project
+        uses: actions/add-to-project@v0.4.0
+        with:
+          # Replace with your project URL
+          project-url: https://github.com/users/heysamtexas/projects/5
+          github-token: ${{ secrets.GITHUB_TOKEN }}
